@@ -18,8 +18,8 @@ export default function Eventos() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
   const [editando, setEditando] = useState(null);
-  const [formData, setFormData] = useState({ tipo: '', animal_id: '', data: '', detalhes: '', peso: '', vacina: '' });
-  const [bulkData, setBulkData] = useState({ tipo: '', tag_prefixo: '', tag_inicio: '', tag_fim: '', data: '', detalhes: '', peso: '', vacina: '' });
+  const [formData, setFormData] = useState({ tipo: '', animal_id: '', data: '', detalhes: '', peso: '', peso_tipo: 'aferido', vacina: '' });
+  const [bulkData, setBulkData] = useState({ tipo: '', tag_prefixo: '', tag_inicio: '', tag_fim: '', data: '', detalhes: '', peso: '', peso_tipo: 'estimado', vacina: '' });
   const [bulkLoading, setBulkLoading] = useState(false);
   const [filtroTipo, setFiltroTipo] = useState('');
   const [sequencias, setSequencias] = useState([]);
@@ -65,7 +65,7 @@ export default function Eventos() {
       }
       setDialogOpen(false);
       setEditando(null);
-      setFormData({ tipo: '', animal_id: '', data: '', detalhes: '', peso: '', vacina: '' });
+      setFormData({ tipo: '', animal_id: '', data: '', detalhes: '', peso: '', peso_tipo: 'aferido', vacina: '' });
       carregarDados();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Erro ao salvar evento');
@@ -88,7 +88,7 @@ export default function Eventos() {
       const response = await api.post(`/eventos/bulk`, payload);
       toast.success(`${response.data.total} evento(s) registrado(s) em massa!`);
       setBulkDialogOpen(false);
-      setBulkData({ tipo: '', tag_prefixo: '', tag_inicio: '', tag_fim: '', data: '', detalhes: '', peso: '', vacina: '' });
+      setBulkData({ tipo: '', tag_prefixo: '', tag_inicio: '', tag_fim: '', data: '', detalhes: '', peso: '', peso_tipo: 'estimado', vacina: '' });
       carregarDados();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Erro ao registrar eventos em massa');
@@ -189,7 +189,17 @@ export default function Eventos() {
                 {(bulkData.tipo === 'pesagem') && (
                   <div>
                     <Label>Peso (kg)</Label>
-                    <Input type="number" step="0.1" placeholder="0.0" value={bulkData.peso} onChange={(e) => setBulkData({...bulkData, peso: e.target.value})} />
+                    <div className="flex gap-2">
+                      <Input type="number" step="0.1" placeholder="0.0" value={bulkData.peso} onChange={(e) => setBulkData({...bulkData, peso: e.target.value})} className="flex-1" />
+                      <Select value={bulkData.peso_tipo || 'estimado'} onValueChange={(v) => setBulkData({...bulkData, peso_tipo: v})}>
+                        <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="aferido">Aferido</SelectItem>
+                          <SelectItem value="estimado">Estimado</SelectItem>
+                          <SelectItem value="medio">Medio</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 )}
                 <div>
@@ -239,7 +249,17 @@ export default function Eventos() {
                 {(formData.tipo === 'pesagem') && (
                   <div>
                     <Label>Peso (kg)</Label>
-                    <Input type="number" step="0.1" placeholder="0.0" value={formData.peso} onChange={(e) => setFormData({...formData, peso: e.target.value})} />
+                    <div className="flex gap-2">
+                      <Input type="number" step="0.1" placeholder="0.0" value={formData.peso} onChange={(e) => setFormData({...formData, peso: e.target.value})} className="flex-1" />
+                      <Select value={formData.peso_tipo || 'aferido'} onValueChange={(v) => setFormData({...formData, peso_tipo: v})}>
+                        <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="aferido">Aferido</SelectItem>
+                          <SelectItem value="estimado">Estimado</SelectItem>
+                          <SelectItem value="medio">Medio</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 )}
                 <div>
@@ -281,7 +301,7 @@ export default function Eventos() {
                 <td className="px-4 py-3">{evento.vacina || '-'}</td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex justify-end gap-1">
-                    <button onClick={() => { setEditando(evento); setFormData({ tipo: evento.tipo, animal_id: evento.animal_id, data: evento.data, detalhes: evento.detalhes || '', peso: evento.peso || '', vacina: evento.vacina || '' }); setDialogOpen(true); }} className="p-1.5 rounded-lg hover:bg-[#F5F0E8] text-[#4A6741]">
+                    <button onClick={() => { setEditando(evento); setFormData({ tipo: evento.tipo, animal_id: evento.animal_id, data: evento.data, detalhes: evento.detalhes || '', peso: evento.peso || '', peso_tipo: evento.peso_tipo || 'aferido', vacina: evento.vacina || '' }); setDialogOpen(true); }} className="p-1.5 rounded-lg hover:bg-[#F5F0E8] text-[#4A6741]">
                       <Pencil size={16} />
                     </button>
                     <button onClick={() => handleDelete(evento.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-red-600">

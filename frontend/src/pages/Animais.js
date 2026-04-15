@@ -49,7 +49,7 @@ export default function Animais() {
   const [selecionados, setSelecionados] = useState(new Set());
   const [formData, setFormData] = useState({ tipo: '', tag: '', sexo: '', genitora_id: '', data_nascimento: '', peso_atual: '', peso_tipo: 'aferido', observacoes: '' });
   const [formBulk, setFormBulk] = useState({ tipo: '', tag_inicial: '', quantidade: 2, sexo: '', data_nascimento: '', peso_atual: '', peso_tipo: 'estimado', observacoes: '' });
-  const [formEvento, setFormEvento] = useState({ tipo: '', data: new Date().toISOString().split('T')[0], detalhes: '', peso: '', vacina: '' });
+  const [formEvento, setFormEvento] = useState({ tipo: '', data: new Date().toISOString().split('T')[0], detalhes: '', peso: '', peso_tipo: 'aferido', vacina: '' });
   const [sequencias, setSequencias] = useState([]);
   const [mostrarSequencias, setMostrarSequencias] = useState(false);
   const [seqAbertaBulk, setSeqAbertaBulk] = useState(true);
@@ -221,7 +221,7 @@ export default function Animais() {
 
   const resetForm = () => { setFormData({ tipo: '', tag: '', sexo: '', genitora_id: '', data_nascimento: '', peso_atual: '', peso_tipo: 'aferido', observacoes: '' }); setEditando(null); };
   const resetBulkForm = () => { setFormBulk({ tipo: '', tag_inicial: '', quantidade: 2, sexo: '', data_nascimento: '', peso_atual: '', peso_tipo: 'estimado', observacoes: '' }); };
-  const resetEventoForm = () => { setFormEvento({ tipo: '', data: new Date().toISOString().split('T')[0], detalhes: '', peso: '', vacina: '' }); };
+  const resetEventoForm = () => { setFormEvento({ tipo: '', data: new Date().toISOString().split('T')[0], detalhes: '', peso: '', peso_tipo: 'aferido', vacina: '' }); };
   const limparFiltros = () => { setFiltroTipo(''); setFiltroSexo(''); setFiltroStatus(''); setFiltroIdadeMin(''); setFiltroIdadeMax(''); setFiltroPesoMin(''); setFiltroPesoMax(''); setFiltroEvento(''); };
 
   const abrirEdicao = (animal) => {
@@ -416,7 +416,7 @@ export default function Animais() {
               <form onSubmit={handleEventoEmMassa} className="space-y-4">
                 <div><Label>Tipo de Evento *</Label><Select value={formEvento.tipo} onValueChange={(v) => setFormEvento({...formEvento, tipo: v})}><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{TIPOS_EVENTOS.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent></Select></div>
                 <div><Label>Data *</Label><Input type="date" value={formEvento.data} onChange={(e) => setFormEvento({...formEvento, data: e.target.value})} required /></div>
-                {formEvento.tipo === 'pesagem' && <div><Label>Peso (kg)</Label><Input type="number" step="0.01" value={formEvento.peso} onChange={(e) => setFormEvento({...formEvento, peso: e.target.value})} /></div>}
+                {formEvento.tipo === 'pesagem' && <div><Label>Peso (kg)</Label><div className="flex gap-2"><Input type="number" step="0.01" value={formEvento.peso} onChange={(e) => setFormEvento({...formEvento, peso: e.target.value})} className="flex-1" /><Select value={formEvento.peso_tipo || 'aferido'} onValueChange={(v) => setFormEvento({...formEvento, peso_tipo: v})}><SelectTrigger className="w-36"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="aferido">Aferido</SelectItem><SelectItem value="estimado">Estimado</SelectItem><SelectItem value="medio">Medio</SelectItem></SelectContent></Select></div></div>}
                 {formEvento.tipo === 'vacinacao' && <div><Label>Vacina</Label><Input value={formEvento.vacina} onChange={(e) => setFormEvento({...formEvento, vacina: e.target.value})} /></div>}
                 <div><Label>Detalhes</Label><Input value={formEvento.detalhes} onChange={(e) => setFormEvento({...formEvento, detalhes: e.target.value})} /></div>
                 <div className="flex gap-2 justify-end"><Button type="button" variant="outline" onClick={() => setDialogEventoOpen(false)}>Cancelar</Button><Button type="submit" className="bg-[#4A6741] hover:bg-[#3B5334] text-white">Aplicar a {selecionados.size} animais</Button></div>
