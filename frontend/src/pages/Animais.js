@@ -62,6 +62,8 @@ export default function Animais() {
   const [historicoLoading, setHistoricoLoading] = useState(false);
 
   // Filtros
+  const [filtroTag, setFiltroTag] = useState('');
+  const [filtroPrefixo, setFiltroPrefixo] = useState('');
   const [filtroTipo, setFiltroTipo] = useState('');
   const [filtroSexo, setFiltroSexo] = useState('');
   const [filtroStatus, setFiltroStatus] = useState('');
@@ -71,6 +73,7 @@ export default function Animais() {
   const [filtroPesoMax, setFiltroPesoMax] = useState('');
   const [filtroEvento, setFiltroEvento] = useState('');
   const [mostrarFiltros, setMostrarFiltros] = useState(false);
+  const [colunaFiltroAberta, setColunaFiltroAberta] = useState('');
 
   const [todosEventos, setTodosEventos] = useState([]);
 
@@ -111,6 +114,8 @@ export default function Animais() {
 
   const animaisFiltrados = useMemo(() => {
     return animais.filter(a => {
+      if (filtroTag && !a.tag.toLowerCase().includes(filtroTag.toLowerCase())) return false;
+      if (filtroPrefixo && !a.tag.toLowerCase().startsWith(filtroPrefixo.toLowerCase())) return false;
       if (filtroTipo && a.tipo !== filtroTipo) return false;
       if (filtroSexo && a.sexo !== filtroSexo) return false;
       if (filtroStatus && a.status !== filtroStatus) return false;
@@ -138,7 +143,7 @@ export default function Animais() {
       }
       return true;
     });
-  }, [animais, filtroTipo, filtroSexo, filtroStatus, filtroIdadeMin, filtroIdadeMax, filtroPesoMin, filtroPesoMax, filtroEvento, todosEventos]);
+  }, [animais, filtroTag, filtroPrefixo, filtroTipo, filtroSexo, filtroStatus, filtroIdadeMin, filtroIdadeMax, filtroPesoMin, filtroPesoMax, filtroEvento, todosEventos]);
 
   const femeas = animais.filter(a => a.sexo === 'femea' && a.status === 'ativo');
 
@@ -222,7 +227,7 @@ export default function Animais() {
   const resetForm = () => { setFormData({ tipo: '', tag: '', sexo: '', genitora_id: '', data_nascimento: '', peso_atual: '', peso_tipo: 'aferido', observacoes: '' }); setEditando(null); };
   const resetBulkForm = () => { setFormBulk({ tipo: '', tag_inicial: '', quantidade: 2, sexo: '', data_nascimento: '', peso_atual: '', peso_tipo: 'estimado', observacoes: '' }); };
   const resetEventoForm = () => { setFormEvento({ tipo: '', data: new Date().toISOString().split('T')[0], detalhes: '', peso: '', peso_tipo: 'aferido', vacina: '' }); };
-  const limparFiltros = () => { setFiltroTipo(''); setFiltroSexo(''); setFiltroStatus(''); setFiltroIdadeMin(''); setFiltroIdadeMax(''); setFiltroPesoMin(''); setFiltroPesoMax(''); setFiltroEvento(''); };
+  const limparFiltros = () => { setFiltroTag(''); setFiltroPrefixo(''); setFiltroTipo(''); setFiltroSexo(''); setFiltroStatus(''); setFiltroIdadeMin(''); setFiltroIdadeMax(''); setFiltroPesoMin(''); setFiltroPesoMax(''); setFiltroEvento(''); };
 
   const abrirEdicao = (animal) => {
     setEditando(animal);
@@ -232,6 +237,18 @@ export default function Animais() {
 
   const getStatusBadge = (s) => ({ ativo: 'bg-[#3B823E] text-white', venda: 'bg-[#2B6CB0] text-white', morte: 'bg-[#C25934] text-white', perda: 'bg-[#D99B29] text-white', inativo: 'bg-[#7A8780] text-white' }[s] || 'bg-[#3B823E] text-white');
   const getGenitoraTag = (id) => { const g = animais.find(a => a.id === id); return g ? g.tag : '-'; };
+
+  const temFiltroAtivo = filtroTag || filtroPrefixo || filtroTipo || filtroSexo || filtroStatus || filtroIdadeMin || filtroIdadeMax || filtroPesoMin || filtroPesoMax || filtroEvento;
+  const filtroAtivo = (col) => {
+    if (col === 'tag') return !!filtroTag || !!filtroPrefixo;
+    if (col === 'tipo') return !!filtroTipo;
+    if (col === 'sexo') return !!filtroSexo;
+    if (col === 'idade') return !!filtroIdadeMin || !!filtroIdadeMax;
+    if (col === 'peso') return !!filtroPesoMin || !!filtroPesoMax;
+    if (col === 'status') return !!filtroStatus;
+    return false;
+  };
+  const toggleColunaFiltro = (col) => setColunaFiltroAberta(prev => prev === col ? '' : col);
 
   if (loading) return <div className="flex items-center justify-center h-64">Carregando...</div>;
 
@@ -325,42 +342,6 @@ export default function Animais() {
         </div>
       </div>
 
-      {/* Filtros */}
-      <div className="mb-4">
-        <Button variant="outline" onClick={() => setMostrarFiltros(!mostrarFiltros)} className="mb-3" data-testid="toggle-filtros-btn">
-          <Funnel size={18} className="mr-2" /> {mostrarFiltros ? 'Ocultar Filtros' : 'Mostrar Filtros'}
-        </Button>
-        {mostrarFiltros && (
-          <div className="bg-white rounded-lg border border-[#E5E3DB] p-4 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4 fade-in">
-            <div><Label className="text-xs">Tipo</Label><Select value={filtroTipo || 'todos_tipo'} onValueChange={(v) => setFiltroTipo(v === 'todos_tipo' ? '' : v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="todos_tipo">Todos</SelectItem>{TIPOS_ANIMAIS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent></Select></div>
-            <div><Label className="text-xs">Sexo</Label><Select value={filtroSexo || 'todos_sexo'} onValueChange={(v) => setFiltroSexo(v === 'todos_sexo' ? '' : v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="todos_sexo">Todos</SelectItem>{SEXOS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent></Select></div>
-            <div><Label className="text-xs">Status</Label><Select value={filtroStatus || 'todos_status'} onValueChange={(v) => setFiltroStatus(v === 'todos_status' ? '' : v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="todos_status">Todos</SelectItem><SelectItem value="ativo">Ativo</SelectItem><SelectItem value="venda">Vendido</SelectItem><SelectItem value="morte">Morto</SelectItem><SelectItem value="perda">Perdido</SelectItem></SelectContent></Select></div>
-            <div><Label className="text-xs">Idade minima (meses)</Label><Input type="number" min="0" value={filtroIdadeMin} onChange={(e) => setFiltroIdadeMin(e.target.value)} placeholder="0" /></div>
-            <div><Label className="text-xs">Idade maxima (meses)</Label><Input type="number" min="0" value={filtroIdadeMax} onChange={(e) => setFiltroIdadeMax(e.target.value)} placeholder="999" /></div>
-            <div><Label className="text-xs">Peso minimo (kg)</Label><Input type="number" min="0" step="0.01" value={filtroPesoMin} onChange={(e) => setFiltroPesoMin(e.target.value)} placeholder="0" /></div>
-            <div><Label className="text-xs">Peso maximo (kg)</Label><Input type="number" min="0" step="0.01" value={filtroPesoMax} onChange={(e) => setFiltroPesoMax(e.target.value)} placeholder="9999" /></div>
-            <div className="col-span-2">
-              <Label className="text-xs">Historico de Eventos</Label>
-              <Select value={filtroEvento || 'todos_ev'} onValueChange={(v) => setFiltroEvento(v === 'todos_ev' ? '' : v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos_ev">Todos</SelectItem>
-                  <SelectItem value="vacinacao">Com vacinacao</SelectItem>
-                  <SelectItem value="tratamento">Com tratamento</SelectItem>
-                  <SelectItem value="pesagem">Com pesagem</SelectItem>
-                  <SelectItem value="desmame">Com desmame</SelectItem>
-                  <SelectItem value="nascimento">Com nascimento</SelectItem>
-                  <SelectItem value="sem_vacinacao">Sem vacinacao</SelectItem>
-                  <SelectItem value="sem_tratamento">Sem tratamento</SelectItem>
-                  <SelectItem value="sem_pesagem">Sem pesagem</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-end"><Button variant="outline" onClick={limparFiltros} className="w-full">Limpar</Button></div>
-          </div>
-        )}
-      </div>
-
       {/* Sequencias de Tags */}
       <div className="mb-4">
         <Button variant="outline" onClick={() => { setMostrarSequencias(!mostrarSequencias); if (!mostrarSequencias) carregarSequencias(); }} className="mb-3">
@@ -382,7 +363,7 @@ export default function Animais() {
               </thead>
               <tbody>
                 {sequencias.map((seq, i) => (
-                  <tr key={i} className="border-t border-[#E8DCC8] hover:bg-[#FFFDF8]">
+                  <tr key={i} onClick={() => { setFiltroPrefixo(filtroPrefixo === seq.prefixo ? '' : seq.prefixo); }} className={`border-t border-[#E8DCC8] cursor-pointer transition-colors ${filtroPrefixo === seq.prefixo ? 'bg-[#E8F0E6] border-l-4 border-l-[#4A6741]' : 'hover:bg-[#FFFDF8]'}`} data-testid={`seq-row-${seq.prefixo}`}>
                     <td className="px-4 py-2 font-mono font-medium">{seq.prefixo}</td>
                     <td className="px-4 py-2">{seq.tipo}</td>
                     <td className="px-4 py-2 font-mono">{seq.prefixo}{String(seq.primeiro).padStart(seq.tamanho_numero, '0')}</td>
@@ -400,6 +381,22 @@ export default function Animais() {
           <p className="text-gray-500 text-sm">Nenhuma sequencia encontrada. Cadastre animais com tags numericas (ex: BOV-001).</p>
         )}
       </div>
+
+      {/* Badge de filtro ativo */}
+      {temFiltroAtivo && (
+        <div className="mb-3 flex items-center gap-2 flex-wrap fade-in" data-testid="filtros-ativos">
+          <span className="text-xs text-[#7A8780] font-medium">Filtros:</span>
+          {filtroPrefixo && <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#E8F0E6] text-[#4A6741] text-xs rounded-full font-medium">Prefixo: {filtroPrefixo}<button onClick={() => setFiltroPrefixo('')} className="ml-0.5 hover:text-red-600"><X size={12} /></button></span>}
+          {filtroTag && <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#E8F0E6] text-[#4A6741] text-xs rounded-full font-medium">Tag: {filtroTag}<button onClick={() => setFiltroTag('')} className="ml-0.5 hover:text-red-600"><X size={12} /></button></span>}
+          {filtroTipo && <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#E8F0E6] text-[#4A6741] text-xs rounded-full font-medium">{filtroTipo}<button onClick={() => setFiltroTipo('')} className="ml-0.5 hover:text-red-600"><X size={12} /></button></span>}
+          {filtroSexo && <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#E8F0E6] text-[#4A6741] text-xs rounded-full font-medium">{filtroSexo === 'macho' ? 'Macho' : 'Femea'}<button onClick={() => setFiltroSexo('')} className="ml-0.5 hover:text-red-600"><X size={12} /></button></span>}
+          {filtroStatus && <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#E8F0E6] text-[#4A6741] text-xs rounded-full font-medium">{filtroStatus}<button onClick={() => setFiltroStatus('')} className="ml-0.5 hover:text-red-600"><X size={12} /></button></span>}
+          {(filtroIdadeMin || filtroIdadeMax) && <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#E8F0E6] text-[#4A6741] text-xs rounded-full font-medium">Idade: {filtroIdadeMin||0}-{filtroIdadeMax||'∞'}m<button onClick={() => { setFiltroIdadeMin(''); setFiltroIdadeMax(''); }} className="ml-0.5 hover:text-red-600"><X size={12} /></button></span>}
+          {(filtroPesoMin || filtroPesoMax) && <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#E8F0E6] text-[#4A6741] text-xs rounded-full font-medium">Peso: {filtroPesoMin||0}-{filtroPesoMax||'∞'}kg<button onClick={() => { setFiltroPesoMin(''); setFiltroPesoMax(''); }} className="ml-0.5 hover:text-red-600"><X size={12} /></button></span>}
+          {filtroEvento && <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#E8F0E6] text-[#4A6741] text-xs rounded-full font-medium capitalize">{filtroEvento.replace('sem_','sem ')}<button onClick={() => setFiltroEvento('')} className="ml-0.5 hover:text-red-600"><X size={12} /></button></span>}
+          <button onClick={limparFiltros} className="text-xs text-[#C25934] hover:underline font-medium">Limpar todos</button>
+        </div>
+      )}
 
       {/* Acoes em massa */}
       {selecionados.size > 0 && (
@@ -436,19 +433,115 @@ export default function Animais() {
           <table className="w-full text-left text-sm">
             <thead className="bg-[#F4F3F0] border-b border-[#E5E3DB]">
               <tr>
-                <th className="px-4 py-4 w-10">
+                <th className="px-4 py-3 w-10">
                   <button onClick={toggleSelecionarTodos} className="text-[#4A6741]" data-testid="select-all-btn">
                     {todosSelec ? <CheckSquare size={20} weight="fill" /> : <Square size={20} />}
                   </button>
                 </th>
-                <th className="px-4 py-4 font-semibold text-[#1B2620]">Tag</th>
-                <th className="px-4 py-4 font-semibold text-[#1B2620]">Tipo</th>
-                <th className="px-4 py-4 font-semibold text-[#1B2620]">Sexo</th>
-                <th className="px-4 py-4 font-semibold text-[#1B2620]">Idade</th>
-                <th className="px-4 py-4 font-semibold text-[#1B2620]">Genitora</th>
-                <th className="px-4 py-4 font-semibold text-[#1B2620]">Peso</th>
-                <th className="px-4 py-4 font-semibold text-[#1B2620]">Status</th>
-                <th className="px-4 py-4 font-semibold text-[#1B2620]">Acoes</th>
+                {/* Tag */}
+                <th className="px-4 py-3 relative">
+                  <button onClick={() => toggleColunaFiltro('tag')} className={`flex items-center gap-1 font-semibold text-sm ${filtroAtivo('tag') ? 'text-[#4A6741]' : 'text-[#1B2620]'} hover:text-[#4A6741] transition-colors`} data-testid="filter-col-tag">
+                    Tag <Funnel size={12} weight={filtroAtivo('tag') ? 'fill' : 'regular'} />
+                  </button>
+                  {colunaFiltroAberta === 'tag' && (
+                    <div className="absolute left-0 top-full mt-1 bg-white border border-[#E5E3DB] rounded-lg shadow-xl p-3 z-30 w-52" data-no-drag="true">
+                      <Input placeholder="Buscar por tag..." value={filtroTag} onChange={(e) => setFiltroTag(e.target.value)} className="text-xs h-8" autoFocus />
+                      <div className="flex justify-between mt-2">
+                        <button onClick={() => { setFiltroTag(''); setFiltroPrefixo(''); }} className="text-[10px] text-[#C25934]">Limpar</button>
+                        <button onClick={() => setColunaFiltroAberta('')} className="text-[10px] text-[#4A6741] font-medium">OK</button>
+                      </div>
+                    </div>
+                  )}
+                </th>
+                {/* Tipo */}
+                <th className="px-4 py-3 relative">
+                  <button onClick={() => toggleColunaFiltro('tipo')} className={`flex items-center gap-1 font-semibold text-sm ${filtroAtivo('tipo') ? 'text-[#4A6741]' : 'text-[#1B2620]'} hover:text-[#4A6741] transition-colors`} data-testid="filter-col-tipo">
+                    Tipo <Funnel size={12} weight={filtroAtivo('tipo') ? 'fill' : 'regular'} />
+                  </button>
+                  {colunaFiltroAberta === 'tipo' && (
+                    <div className="absolute left-0 top-full mt-1 bg-white border border-[#E5E3DB] rounded-lg shadow-xl p-2 z-30 w-40">
+                      <button onClick={() => { setFiltroTipo(''); setColunaFiltroAberta(''); }} className={`block w-full text-left px-2 py-1.5 rounded text-xs ${!filtroTipo ? 'bg-[#E8F0E6] text-[#4A6741] font-medium' : 'hover:bg-[#F5F0E8]'}`}>Todos</button>
+                      {TIPOS_ANIMAIS.map(t => (
+                        <button key={t} onClick={() => { setFiltroTipo(t); setColunaFiltroAberta(''); }} className={`block w-full text-left px-2 py-1.5 rounded text-xs ${filtroTipo === t ? 'bg-[#E8F0E6] text-[#4A6741] font-medium' : 'hover:bg-[#F5F0E8]'}`}>{t}</button>
+                      ))}
+                    </div>
+                  )}
+                </th>
+                {/* Sexo */}
+                <th className="px-4 py-3 relative">
+                  <button onClick={() => toggleColunaFiltro('sexo')} className={`flex items-center gap-1 font-semibold text-sm ${filtroAtivo('sexo') ? 'text-[#4A6741]' : 'text-[#1B2620]'} hover:text-[#4A6741] transition-colors`} data-testid="filter-col-sexo">
+                    Sexo <Funnel size={12} weight={filtroAtivo('sexo') ? 'fill' : 'regular'} />
+                  </button>
+                  {colunaFiltroAberta === 'sexo' && (
+                    <div className="absolute left-0 top-full mt-1 bg-white border border-[#E5E3DB] rounded-lg shadow-xl p-2 z-30 w-36">
+                      <button onClick={() => { setFiltroSexo(''); setColunaFiltroAberta(''); }} className={`block w-full text-left px-2 py-1.5 rounded text-xs ${!filtroSexo ? 'bg-[#E8F0E6] text-[#4A6741] font-medium' : 'hover:bg-[#F5F0E8]'}`}>Todos</button>
+                      {SEXOS.map(s => (
+                        <button key={s.value} onClick={() => { setFiltroSexo(s.value); setColunaFiltroAberta(''); }} className={`block w-full text-left px-2 py-1.5 rounded text-xs ${filtroSexo === s.value ? 'bg-[#E8F0E6] text-[#4A6741] font-medium' : 'hover:bg-[#F5F0E8]'}`}>{s.label}</button>
+                      ))}
+                    </div>
+                  )}
+                </th>
+                {/* Idade */}
+                <th className="px-4 py-3 relative">
+                  <button onClick={() => toggleColunaFiltro('idade')} className={`flex items-center gap-1 font-semibold text-sm ${filtroAtivo('idade') ? 'text-[#4A6741]' : 'text-[#1B2620]'} hover:text-[#4A6741] transition-colors`} data-testid="filter-col-idade">
+                    Idade <Funnel size={12} weight={filtroAtivo('idade') ? 'fill' : 'regular'} />
+                  </button>
+                  {colunaFiltroAberta === 'idade' && (
+                    <div className="absolute left-0 top-full mt-1 bg-white border border-[#E5E3DB] rounded-lg shadow-xl p-3 z-30 w-48">
+                      <p className="text-[10px] text-[#7A8780] mb-1">Faixa em meses</p>
+                      <div className="flex gap-1 items-center">
+                        <Input type="number" min="0" placeholder="Min" value={filtroIdadeMin} onChange={(e) => setFiltroIdadeMin(e.target.value)} className="text-xs h-7 w-16" />
+                        <span className="text-xs text-[#7A8780]">a</span>
+                        <Input type="number" min="0" placeholder="Max" value={filtroIdadeMax} onChange={(e) => setFiltroIdadeMax(e.target.value)} className="text-xs h-7 w-16" />
+                      </div>
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {[['0-6m',0,6],['6-12m',6,12],['1-2a',12,24],['2+a',24,'']].map(([label,min,max]) => (
+                          <button key={label} onClick={() => { setFiltroIdadeMin(String(min)); setFiltroIdadeMax(max === '' ? '' : String(max)); }} className="px-1.5 py-0.5 bg-[#F5F0E8] text-[10px] rounded hover:bg-[#E8F0E6]">{label}</button>
+                        ))}
+                      </div>
+                      <div className="flex justify-between mt-2">
+                        <button onClick={() => { setFiltroIdadeMin(''); setFiltroIdadeMax(''); }} className="text-[10px] text-[#C25934]">Limpar</button>
+                        <button onClick={() => setColunaFiltroAberta('')} className="text-[10px] text-[#4A6741] font-medium">OK</button>
+                      </div>
+                    </div>
+                  )}
+                </th>
+                <th className="px-4 py-3 font-semibold text-[#1B2620]">Genitora</th>
+                {/* Peso */}
+                <th className="px-4 py-3 relative">
+                  <button onClick={() => toggleColunaFiltro('peso')} className={`flex items-center gap-1 font-semibold text-sm ${filtroAtivo('peso') ? 'text-[#4A6741]' : 'text-[#1B2620]'} hover:text-[#4A6741] transition-colors`} data-testid="filter-col-peso">
+                    Peso <Funnel size={12} weight={filtroAtivo('peso') ? 'fill' : 'regular'} />
+                  </button>
+                  {colunaFiltroAberta === 'peso' && (
+                    <div className="absolute left-0 top-full mt-1 bg-white border border-[#E5E3DB] rounded-lg shadow-xl p-3 z-30 w-48">
+                      <p className="text-[10px] text-[#7A8780] mb-1">Faixa em kg</p>
+                      <div className="flex gap-1 items-center">
+                        <Input type="number" min="0" step="0.01" placeholder="Min" value={filtroPesoMin} onChange={(e) => setFiltroPesoMin(e.target.value)} className="text-xs h-7 w-16" />
+                        <span className="text-xs text-[#7A8780]">a</span>
+                        <Input type="number" min="0" step="0.01" placeholder="Max" value={filtroPesoMax} onChange={(e) => setFiltroPesoMax(e.target.value)} className="text-xs h-7 w-16" />
+                      </div>
+                      <div className="flex justify-between mt-2">
+                        <button onClick={() => { setFiltroPesoMin(''); setFiltroPesoMax(''); }} className="text-[10px] text-[#C25934]">Limpar</button>
+                        <button onClick={() => setColunaFiltroAberta('')} className="text-[10px] text-[#4A6741] font-medium">OK</button>
+                      </div>
+                    </div>
+                  )}
+                </th>
+                {/* Status */}
+                <th className="px-4 py-3 relative">
+                  <button onClick={() => toggleColunaFiltro('status')} className={`flex items-center gap-1 font-semibold text-sm ${filtroAtivo('status') ? 'text-[#4A6741]' : 'text-[#1B2620]'} hover:text-[#4A6741] transition-colors`} data-testid="filter-col-status">
+                    Status <Funnel size={12} weight={filtroAtivo('status') ? 'fill' : 'regular'} />
+                  </button>
+                  {colunaFiltroAberta === 'status' && (
+                    <div className="absolute left-0 top-full mt-1 bg-white border border-[#E5E3DB] rounded-lg shadow-xl p-2 z-30 w-36">
+                      <button onClick={() => { setFiltroStatus(''); setColunaFiltroAberta(''); }} className={`block w-full text-left px-2 py-1.5 rounded text-xs ${!filtroStatus ? 'bg-[#E8F0E6] text-[#4A6741] font-medium' : 'hover:bg-[#F5F0E8]'}`}>Todos</button>
+                      {[['ativo','Ativo'],['venda','Vendido'],['morte','Morto'],['perda','Perdido']].map(([v,l]) => (
+                        <button key={v} onClick={() => { setFiltroStatus(v); setColunaFiltroAberta(''); }} className={`block w-full text-left px-2 py-1.5 rounded text-xs ${filtroStatus === v ? 'bg-[#E8F0E6] text-[#4A6741] font-medium' : 'hover:bg-[#F5F0E8]'}`}>{l}</button>
+                      ))}
+                    </div>
+                  )}
+                </th>
+                <th className="px-4 py-3 font-semibold text-[#1B2620]">Acoes</th>
               </tr>
             </thead>
             <tbody>
