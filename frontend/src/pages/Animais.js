@@ -55,11 +55,11 @@ export default function Animais() {
   const [seqAbertaBulk, setSeqAbertaBulk] = useState(true);
   const [seqAbertaIndiv, setSeqAbertaIndiv] = useState(true);
 
-  // Historico
-  const [historicoOpen, setHistoricoOpen] = useState(false);
-  const [historicoAnimal, setHistoricoAnimal] = useState(null);
+  // Historico inline
+  const [expandidoId, setExpandidoId] = useState(null);
   const [historicoData, setHistoricoData] = useState(null);
   const [historicoLoading, setHistoricoLoading] = useState(false);
+  const [alertasAnimal, setAlertasAnimal] = useState([]);
 
   // Filtros
   const [filtroTag, setFiltroTag] = useState('');
@@ -101,13 +101,24 @@ export default function Animais() {
     } catch { /* silencioso */ }
   };
 
-  const abrirHistorico = async (animal) => {
-    setHistoricoAnimal(animal);
-    setHistoricoOpen(true);
+  const toggleHistorico = async (animal) => {
+    if (expandidoId === animal.id) {
+      setExpandidoId(null);
+      setHistoricoData(null);
+      setAlertasAnimal([]);
+      return;
+    }
+    setExpandidoId(animal.id);
     setHistoricoLoading(true);
+    setHistoricoData(null);
+    setAlertasAnimal([]);
     try {
-      const res = await api.get(`/animais/${animal.id}/historico`);
-      setHistoricoData(res.data);
+      const [histRes, alertRes] = await Promise.all([
+        api.get(`/animais/${animal.id}/historico`),
+        api.get('/lembretes/alertas')
+      ]);
+      setHistoricoData(histRes.data);
+      setAlertasAnimal((alertRes.data.alertas || []).filter(a => a.animal_id === animal.id));
     } catch { toast.error('Erro ao carregar historico'); }
     finally { setHistoricoLoading(false); }
   };
@@ -382,19 +393,36 @@ export default function Animais() {
         )}
       </div>
 
-      {/* Badge de filtro ativo */}
-      {temFiltroAtivo && (
+      {/* Badge de filtro ativo + Filtro Historico Eventos */}
+      {(temFiltroAtivo || true) && (
         <div className="mb-3 flex items-center gap-2 flex-wrap fade-in" data-testid="filtros-ativos">
-          <span className="text-xs text-[#7A8780] font-medium">Filtros:</span>
-          {filtroPrefixo && <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#E8F0E6] text-[#4A6741] text-xs rounded-full font-medium">Prefixo: {filtroPrefixo}<button onClick={() => setFiltroPrefixo('')} className="ml-0.5 hover:text-red-600"><X size={12} /></button></span>}
-          {filtroTag && <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#E8F0E6] text-[#4A6741] text-xs rounded-full font-medium">Tag: {filtroTag}<button onClick={() => setFiltroTag('')} className="ml-0.5 hover:text-red-600"><X size={12} /></button></span>}
-          {filtroTipo && <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#E8F0E6] text-[#4A6741] text-xs rounded-full font-medium">{filtroTipo}<button onClick={() => setFiltroTipo('')} className="ml-0.5 hover:text-red-600"><X size={12} /></button></span>}
-          {filtroSexo && <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#E8F0E6] text-[#4A6741] text-xs rounded-full font-medium">{filtroSexo === 'macho' ? 'Macho' : 'Femea'}<button onClick={() => setFiltroSexo('')} className="ml-0.5 hover:text-red-600"><X size={12} /></button></span>}
-          {filtroStatus && <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#E8F0E6] text-[#4A6741] text-xs rounded-full font-medium">{filtroStatus}<button onClick={() => setFiltroStatus('')} className="ml-0.5 hover:text-red-600"><X size={12} /></button></span>}
-          {(filtroIdadeMin || filtroIdadeMax) && <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#E8F0E6] text-[#4A6741] text-xs rounded-full font-medium">Idade: {filtroIdadeMin||0}-{filtroIdadeMax||'∞'}m<button onClick={() => { setFiltroIdadeMin(''); setFiltroIdadeMax(''); }} className="ml-0.5 hover:text-red-600"><X size={12} /></button></span>}
-          {(filtroPesoMin || filtroPesoMax) && <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#E8F0E6] text-[#4A6741] text-xs rounded-full font-medium">Peso: {filtroPesoMin||0}-{filtroPesoMax||'∞'}kg<button onClick={() => { setFiltroPesoMin(''); setFiltroPesoMax(''); }} className="ml-0.5 hover:text-red-600"><X size={12} /></button></span>}
-          {filtroEvento && <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#E8F0E6] text-[#4A6741] text-xs rounded-full font-medium capitalize">{filtroEvento.replace('sem_','sem ')}<button onClick={() => setFiltroEvento('')} className="ml-0.5 hover:text-red-600"><X size={12} /></button></span>}
-          <button onClick={limparFiltros} className="text-xs text-[#C25934] hover:underline font-medium">Limpar todos</button>
+          {/* Filtro historico de eventos */}
+          <Select value={filtroEvento || 'todos_ev'} onValueChange={(v) => setFiltroEvento(v === 'todos_ev' ? '' : v)}>
+            <SelectTrigger className="w-52 h-8 text-xs"><SelectValue placeholder="Historico de eventos" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos_ev">Todos (historico)</SelectItem>
+              <SelectItem value="vacinacao">Com vacinacao</SelectItem>
+              <SelectItem value="tratamento">Com tratamento</SelectItem>
+              <SelectItem value="pesagem">Com pesagem</SelectItem>
+              <SelectItem value="desmame">Com desmame</SelectItem>
+              <SelectItem value="nascimento">Com nascimento</SelectItem>
+              <SelectItem value="sem_vacinacao">Sem vacinacao</SelectItem>
+              <SelectItem value="sem_tratamento">Sem tratamento</SelectItem>
+              <SelectItem value="sem_pesagem">Sem pesagem</SelectItem>
+            </SelectContent>
+          </Select>
+          {temFiltroAtivo && <>
+            <span className="text-[10px] text-[#7A8780]">|</span>
+            {filtroPrefixo && <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#E8F0E6] text-[#4A6741] text-xs rounded-full font-medium">Prefixo: {filtroPrefixo}<button onClick={() => setFiltroPrefixo('')} className="ml-0.5 hover:text-red-600"><X size={12} /></button></span>}
+            {filtroTag && <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#E8F0E6] text-[#4A6741] text-xs rounded-full font-medium">Tag: {filtroTag}<button onClick={() => setFiltroTag('')} className="ml-0.5 hover:text-red-600"><X size={12} /></button></span>}
+            {filtroTipo && <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#E8F0E6] text-[#4A6741] text-xs rounded-full font-medium">{filtroTipo}<button onClick={() => setFiltroTipo('')} className="ml-0.5 hover:text-red-600"><X size={12} /></button></span>}
+            {filtroSexo && <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#E8F0E6] text-[#4A6741] text-xs rounded-full font-medium">{filtroSexo === 'macho' ? 'Macho' : 'Femea'}<button onClick={() => setFiltroSexo('')} className="ml-0.5 hover:text-red-600"><X size={12} /></button></span>}
+            {filtroStatus && <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#E8F0E6] text-[#4A6741] text-xs rounded-full font-medium">{filtroStatus}<button onClick={() => setFiltroStatus('')} className="ml-0.5 hover:text-red-600"><X size={12} /></button></span>}
+            {(filtroIdadeMin || filtroIdadeMax) && <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#E8F0E6] text-[#4A6741] text-xs rounded-full font-medium">Idade: {filtroIdadeMin||0}-{filtroIdadeMax||'∞'}m<button onClick={() => { setFiltroIdadeMin(''); setFiltroIdadeMax(''); }} className="ml-0.5 hover:text-red-600"><X size={12} /></button></span>}
+            {(filtroPesoMin || filtroPesoMax) && <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#E8F0E6] text-[#4A6741] text-xs rounded-full font-medium">Peso: {filtroPesoMin||0}-{filtroPesoMax||'∞'}kg<button onClick={() => { setFiltroPesoMin(''); setFiltroPesoMax(''); }} className="ml-0.5 hover:text-red-600"><X size={12} /></button></span>}
+            {filtroEvento && <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#E8F0E6] text-[#4A6741] text-xs rounded-full font-medium capitalize">{filtroEvento.replace('sem_','sem ')}<button onClick={() => setFiltroEvento('')} className="ml-0.5 hover:text-red-600"><X size={12} /></button></span>}
+            <button onClick={limparFiltros} className="text-xs text-[#C25934] hover:underline font-medium">Limpar todos</button>
+          </>}
         </div>
       )}
 
@@ -548,91 +576,111 @@ export default function Animais() {
               {animaisFiltrados.length === 0 ? (
                 <tr><td colSpan="9" className="px-6 py-12 text-center text-[#7A8780]">Nenhum animal encontrado</td></tr>
               ) : animaisFiltrados.map((animal) => (
-                <tr key={animal.id} className={`table-row border-b border-[#E5E3DB] hover:bg-[#FDFCFB] ${selecionados.has(animal.id) ? 'bg-[#E8F0E6]' : ''}`}>
-                  <td className="px-4 py-4">
-                    <button onClick={() => toggleSelecionar(animal.id)} className="text-[#4A6741]">
-                      {selecionados.has(animal.id) ? <CheckSquare size={20} weight="fill" /> : <Square size={20} />}
-                    </button>
-                  </td>
-                  <td className="px-4 py-4 font-medium text-[#1B2620]">{animal.tag}</td>
-                  <td className="px-4 py-4 text-[#3A453F]">{animal.tipo}</td>
-                  <td className="px-4 py-4 text-[#3A453F]">{animal.sexo === 'macho' ? 'Macho' : animal.sexo === 'femea' ? 'Femea' : '-'}</td>
-                  <td className="px-4 py-4 text-[#3A453F]">{formatarIdade(animal.data_nascimento)}</td>
-                  <td className="px-4 py-4 text-[#3A453F]">{animal.genitora_id ? getGenitoraTag(animal.genitora_id) : '-'}</td>
-                  <td className="px-4 py-4 text-[#3A453F]">{animal.peso_atual ? <span className="flex items-center gap-1">{animal.peso_atual} kg <span className={`text-[10px] font-medium px-1 rounded ${animal.peso_tipo === 'estimado' ? 'bg-[#D99B29]/15 text-[#D99B29]' : animal.peso_tipo === 'medio' ? 'bg-[#2B6CB0]/15 text-[#2B6CB0]' : 'bg-[#3B823E]/15 text-[#3B823E]'}`}>{animal.peso_tipo === 'estimado' ? 'EST' : animal.peso_tipo === 'medio' ? 'MED' : 'AFR'}</span></span> : '-'}</td>
-                  <td className="px-4 py-4"><span className={`px-2 py-1 rounded-md text-xs font-medium ${getStatusBadge(animal.status)}`}>{animal.status}</span></td>
-                  <td className="px-4 py-4">
-                    <div className="flex gap-2">
-                      <button onClick={() => abrirHistorico(animal)} className="text-[#2B6CB0] hover:text-[#1E5A9E]" title="Historico"><ClockCounterClockwise size={18} /></button>
-                      <button onClick={() => abrirEdicao(animal)} className="text-[#4A6741] hover:text-[#3B5334]"><Pencil size={18} /></button>
-                      <button onClick={() => handleDelete(animal.id)} className="text-[#C25934] hover:text-[#A64B2B]"><Trash size={18} /></button>
-                    </div>
-                  </td>
-                </tr>
+                <React.Fragment key={animal.id}>
+                  <tr onClick={() => toggleHistorico(animal)} className={`table-row border-b border-[#E5E3DB] cursor-pointer transition-colors ${expandidoId === animal.id ? 'bg-[#F5F0E8] border-b-0' : selecionados.has(animal.id) ? 'bg-[#E8F0E6]' : 'hover:bg-[#FDFCFB]'}`}>
+                    <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
+                      <button onClick={() => toggleSelecionar(animal.id)} className="text-[#4A6741]">
+                        {selecionados.has(animal.id) ? <CheckSquare size={20} weight="fill" /> : <Square size={20} />}
+                      </button>
+                    </td>
+                    <td className="px-4 py-4 font-medium text-[#1B2620]">{animal.tag}</td>
+                    <td className="px-4 py-4 text-[#3A453F]">{animal.tipo}</td>
+                    <td className="px-4 py-4 text-[#3A453F]">{animal.sexo === 'macho' ? 'Macho' : animal.sexo === 'femea' ? 'Femea' : '-'}</td>
+                    <td className="px-4 py-4 text-[#3A453F]">{formatarIdade(animal.data_nascimento)}</td>
+                    <td className="px-4 py-4 text-[#3A453F]">{animal.genitora_id ? getGenitoraTag(animal.genitora_id) : '-'}</td>
+                    <td className="px-4 py-4 text-[#3A453F]">{animal.peso_atual ? <span className="flex items-center gap-1">{animal.peso_atual} kg <span className={`text-[10px] font-medium px-1 rounded ${animal.peso_tipo === 'estimado' ? 'bg-[#D99B29]/15 text-[#D99B29]' : animal.peso_tipo === 'medio' ? 'bg-[#2B6CB0]/15 text-[#2B6CB0]' : 'bg-[#3B823E]/15 text-[#3B823E]'}`}>{animal.peso_tipo === 'estimado' ? 'EST' : animal.peso_tipo === 'medio' ? 'MED' : 'AFR'}</span></span> : '-'}</td>
+                    <td className="px-4 py-4"><span className={`px-2 py-1 rounded-md text-xs font-medium ${getStatusBadge(animal.status)}`}>{animal.status}</span></td>
+                    <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex gap-2">
+                        <button onClick={() => abrirEdicao(animal)} className="text-[#4A6741] hover:text-[#3B5334]"><Pencil size={18} /></button>
+                        <button onClick={() => handleDelete(animal.id)} className="text-[#C25934] hover:text-[#A64B2B]"><Trash size={18} /></button>
+                      </div>
+                    </td>
+                  </tr>
+                  {/* Historico inline expandido */}
+                  {expandidoId === animal.id && (
+                    <tr className="bg-[#FAFAF7]">
+                      <td colSpan="9" className="px-6 py-4 border-b border-[#E5E3DB]">
+                        {historicoLoading ? (
+                          <div className="flex justify-center py-6"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#4A6741]"></div></div>
+                        ) : historicoData ? (
+                          <div className="space-y-4" data-testid="historico-inline">
+                            {/* Resumo cards */}
+                            {historicoData.resumo_eventos && Object.keys(historicoData.resumo_eventos).length > 0 && (
+                              <div className="flex flex-wrap gap-2">
+                                {Object.entries(historicoData.resumo_eventos).map(([tipo, info]) => (
+                                  <div key={tipo} className="bg-white rounded-lg px-3 py-2 border border-[#E5E3DB] text-center min-w-[90px]">
+                                    <p className="text-base font-bold text-[#2F1810]">{info.total}</p>
+                                    <p className="text-[10px] text-[#7A8780] capitalize">{tipo}</p>
+                                    {info.ultimo && <p className="text-[10px] text-[#4A6741]">{new Date(info.ultimo + 'T00:00:00').toLocaleDateString('pt-BR')}</p>}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Alertas Pendentes (Eventos Agendados) */}
+                            {alertasAnimal.length > 0 && (
+                              <div>
+                                <p className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-2 flex items-center gap-1">
+                                  <Syringe size={14} weight="fill" /> Pendentes / Agendados ({alertasAnimal.length})
+                                </p>
+                                <div className="space-y-1.5">
+                                  {alertasAnimal.map((alerta, i) => (
+                                    <div key={i} className={`flex items-center gap-3 px-3 py-2 rounded-lg border ${alerta.urgente ? 'border-red-200 bg-red-50/70' : 'border-amber-200 bg-amber-50/70'}`}>
+                                      <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${alerta.urgente ? 'bg-red-500' : 'bg-amber-500'}`}></div>
+                                      <div className="flex-1 min-w-0">
+                                        <span className="text-xs font-medium capitalize text-[#2F1810]">{alerta.tipo_acao}</span>
+                                        {alerta.mensagem && <span className="text-xs text-[#7A8780] ml-2">{alerta.mensagem}</span>}
+                                      </div>
+                                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${alerta.urgente ? 'bg-red-200 text-red-700' : 'bg-amber-200 text-amber-700'}`}>
+                                        {alerta.urgente ? 'Nunca feito' : 'Vencido'}
+                                      </span>
+                                      {alerta.ultimo_evento && <span className="text-[10px] text-[#7A8780]">Ultimo: {new Date(alerta.ultimo_evento + 'T00:00:00').toLocaleDateString('pt-BR')}</span>}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Historico Realizado */}
+                            <div>
+                              <p className="text-xs font-bold text-[#4A6741] uppercase tracking-wider mb-2">
+                                Historico ({historicoData.total_eventos} evento(s) · {historicoData.total_movimentacoes} mov.)
+                              </p>
+                              {historicoData.historico.length === 0 ? (
+                                <p className="text-xs text-[#7A8780] py-2">Nenhum registro</p>
+                              ) : (
+                                <div className="space-y-1.5">
+                                  {historicoData.historico.map((item, i) => (
+                                    <div key={i} className={`flex items-start gap-3 px-3 py-2 rounded-lg border ${item.tipo === 'evento' ? 'border-[#E8DCC8] bg-white' : 'border-blue-100 bg-blue-50/30'}`}>
+                                      <div className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${item.tipo === 'evento' ? 'bg-[#4A6741]' : 'bg-[#2B6CB0]'}`}></div>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-xs font-medium capitalize text-[#2F1810]">{item.subtipo}</span>
+                                          <span className={`text-[10px] px-1 py-0.5 rounded ${item.tipo === 'evento' ? 'bg-[#4A6741]/10 text-[#4A6741]' : 'bg-[#2B6CB0]/10 text-[#2B6CB0]'}`}>{item.tipo === 'evento' ? 'Evento' : 'Mov.'}</span>
+                                          {item.vacina && <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded">{item.vacina}</span>}
+                                          {item.peso && <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">{item.peso} kg</span>}
+                                          {item.valor && <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">R$ {parseFloat(item.valor).toFixed(2)}</span>}
+                                        </div>
+                                        {item.detalhes && <p className="text-[10px] text-[#7A8780] mt-0.5">{item.detalhes}</p>}
+                                      </div>
+                                      <span className="text-[10px] text-[#7A8780] flex-shrink-0">{item.data ? new Date(item.data + 'T00:00:00').toLocaleDateString('pt-BR') : '-'}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ) : null}
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               ))}
             </tbody>
           </table>
         </div>
       </div>
-
-      {/* Dialog Historico */}
-      <Dialog open={historicoOpen} onOpenChange={(v) => { setHistoricoOpen(v); if (!v) { setHistoricoData(null); setHistoricoAnimal(null); } }}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              Historico — {historicoAnimal?.tag} <span className="text-sm font-normal text-[#7A8780]">({historicoAnimal?.tipo})</span>
-            </DialogTitle>
-          </DialogHeader>
-          {historicoLoading ? (
-            <div className="flex justify-center py-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#4A6741]"></div></div>
-          ) : historicoData ? (
-            <div className="space-y-4">
-              {/* Resumo */}
-              {historicoData.resumo_eventos && Object.keys(historicoData.resumo_eventos).length > 0 && (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {Object.entries(historicoData.resumo_eventos).map(([tipo, info]) => (
-                    <div key={tipo} className="bg-[#F5F0E8] rounded-lg p-3 text-center">
-                      <p className="text-lg font-bold text-[#2F1810]">{info.total}</p>
-                      <p className="text-xs text-[#7A8780] capitalize">{tipo}</p>
-                      {info.ultimo && <p className="text-xs text-[#4A6741] mt-1">Ultimo: {new Date(info.ultimo + 'T00:00:00').toLocaleDateString('pt-BR')}</p>}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Timeline */}
-              <div>
-                <p className="text-sm font-semibold text-[#2F1810] mb-2">
-                  {historicoData.total_eventos} evento(s) · {historicoData.total_movimentacoes} movimentacao(oes)
-                </p>
-                {historicoData.historico.length === 0 ? (
-                  <p className="text-center py-6 text-gray-500">Nenhum registro encontrado</p>
-                ) : (
-                  <div className="space-y-2">
-                    {historicoData.historico.map((item, i) => (
-                      <div key={i} className={`flex items-start gap-3 p-3 rounded-lg border ${item.tipo === 'evento' ? 'border-[#E8DCC8] bg-[#FFFDF8]' : 'border-blue-200 bg-blue-50/50'}`}>
-                        <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${item.tipo === 'evento' ? 'bg-[#4A6741]' : 'bg-[#2B6CB0]'}`}></div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-medium capitalize text-[#2F1810]">{item.subtipo}</span>
-                            <span className="text-xs text-[#7A8780]">{item.data ? new Date(item.data + 'T00:00:00').toLocaleDateString('pt-BR') : '-'}</span>
-                          </div>
-                          <div className="flex flex-wrap gap-2 mt-1">
-                            {item.vacina && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">Vacina: {item.vacina}</span>}
-                            {item.peso && <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded">{item.peso} kg</span>}
-                            {item.valor && <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">R$ {parseFloat(item.valor).toFixed(2)}</span>}
-                          </div>
-                          {item.detalhes && <p className="text-xs text-[#7A8780] mt-1">{item.detalhes}</p>}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : null}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
