@@ -37,7 +37,10 @@ api_router = APIRouter(prefix="/api")
 JWT_ALGORITHM = "HS256"
 
 def get_jwt_secret():
-    return os.environ["JWT_SECRET"]
+    secret = os.environ.get("JWT_SECRET")
+    if not secret:
+        secret = "default-secret-change-me-in-production"
+    return secret
 
 # ============= AUTH HELPERS =============
 
