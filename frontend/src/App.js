@@ -13,6 +13,13 @@ import Lembretes from './pages/Lembretes';
 import { Toaster } from './components/ui/sonner';
 import './App.css';
 
+// Register Service Worker for push notifications
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
+
 function App() {
   const [user, setUser] = useState(null);
   const [checking, setChecking] = useState(true);

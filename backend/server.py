@@ -1364,6 +1364,167 @@ async def gerar_relatorio_excel():
     return StreamingResponse(buffer, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": "attachment; filename=relatorio_fazenda.xlsx"})
 
 
+# ============= NOTIFICATIONS / PUSH =============
+
+class PushSubscriptionInput(BaseModel):
+    endpoint: str
+    keys: dict
+
+class NotificationReadInput(BaseModel):
+    notification_ids: Optional[List[str]] = None
+
+@api_router.get("/notifications/vapid-key")
+async def get_vapid_key():
+    return {"public_key": os.environ.get("VAPID_PUBLIC_KEY", "")}
+
+@api_router.post("/notifications/subscribe")
+async def subscribe_push(input: PushSubscriptionInput, request: Request):
+    user = await get_current_user(request)
+    sub_data = {
+        "user_id": user["id"],
+        "endpoint": input.endpoint,
+        "keys": input.keys,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.push_subscriptions.update_one(
+        {"endpoint": input.endpoint},
+        {"$set": sub_data},
+        upsert=True
+    )
+    return {"message": "Inscricao registrada"}
+
+@api_router.post("/notifications/unsubscribe")
+async def unsubscribe_push(input: PushSubscriptionInput, request: Request):
+    await get_current_user(request)
+    await db.push_subscriptions.delete_one({"endpoint": input.endpoint})
+    return {"message": "Inscricao removida"}
+
+@api_router.get("/notifications")
+async def listar_notificacoes(request: Request, unread_only: bool = False):
+    user = await get_current_user(request)
+    filtro = {"user_id": user["id"]}
+    if unread_only:
+        filtro["read"] = False
+    docs = await db.notifications.find(filtro, {"_id": 0}).sort("created_at", -1).to_list(100)
+    unread_count = await db.notifications.count_documents({"user_id": user["id"], "read": False})
+    return {"notifications": docs, "unread_count": unread_count}
+
+@api_router.put("/notifications/{notification_id}/read")
+async def marcar_lida(notification_id: str, request: Request):
+    user = await get_current_user(request)
+    await db.notifications.update_one(
+        {"id": notification_id, "user_id": user["id"]},
+        {"$set": {"read": True}}
+    )
+    return {"message": "Notificacao lida"}
+
+@api_router.put("/notifications/read-all")
+async def marcar_todas_lidas(request: Request):
+    user = await get_current_user(request)
+    await db.notifications.update_many(
+        {"user_id": user["id"], "read": False},
+        {"$set": {"read": True}}
+    )
+    return {"message": "Todas as notificacoes lidas"}
+
+@api_router.post("/notifications/check")
+async def verificar_e_notificar(request: Request):
+    user = await get_current_user(request)
+    
+    # Get current alerts
+    alertas_response = await verificar_alertas()
+    alertas = alertas_response.get("alertas", [])
+    
+    if not alertas:
+        return {"new_notifications": 0, "total_alerts": 0}
+    
+    # Check which alerts already have notifications (not dismissed)
+    existing_notifs = await db.notifications.find(
+        {"user_id": user["id"], "dismissed": {"$ne": True}},
+        {"_id": 0, "alert_key": 1}
+    ).to_list(10000)
+    existing_keys = {n.get("alert_key") for n in existing_notifs}
+    
+    new_notifications = []
+    for alerta in alertas:
+        alert_key = f"{alerta['lembrete_id']}:{alerta['animal_id']}"
+        if alert_key in existing_keys:
+            continue
+        
+        notif = {
+            "id": str(uuid.uuid4()),
+            "user_id": user["id"],
+            "alert_key": alert_key,
+            "title": f"{alerta['tipo_acao'].capitalize()} - {alerta['animal_tag']}",
+            "body": alerta.get("mensagem") or f"{alerta['lembrete_nome']}: {alerta['animal_tag']} ({alerta['animal_tipo']})",
+            "tipo_acao": alerta["tipo_acao"],
+            "animal_tag": alerta["animal_tag"],
+            "animal_id": alerta["animal_id"],
+            "lembrete_id": alerta["lembrete_id"],
+            "urgente": alerta.get("urgente", False),
+            "ultimo_evento": alerta.get("ultimo_evento"),
+            "read": False,
+            "dismissed": False,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        new_notifications.append(notif)
+    
+    if new_notifications:
+        await db.notifications.insert_many(new_notifications)
+        
+        # Send Web Push to all subscriptions of this user
+        subscriptions = await db.push_subscriptions.find(
+            {"user_id": user["id"]}, {"_id": 0}
+        ).to_list(100)
+        
+        if subscriptions:
+            import json
+            from pywebpush import webpush, WebPushException
+            
+            vapid_private_key = os.environ.get("VAPID_PRIVATE_KEY", "").replace("\\n", "\n")
+            vapid_claims_email = os.environ.get("VAPID_CLAIMS_EMAIL", "mailto:admin@fazenda.com")
+            
+            urgentes = [n for n in new_notifications if n["urgente"]]
+            vencidos = [n for n in new_notifications if not n["urgente"]]
+            
+            push_title = f"Gestao Rural - {len(new_notifications)} alerta(s)"
+            push_body_parts = []
+            if urgentes:
+                push_body_parts.append(f"{len(urgentes)} nunca realizado(s)")
+            if vencidos:
+                push_body_parts.append(f"{len(vencidos)} vencido(s)")
+            push_body = ", ".join(push_body_parts)
+            
+            push_data = json.dumps({
+                "title": push_title,
+                "body": push_body,
+                "icon": "/favicon.ico",
+                "badge": "/favicon.ico",
+                "tag": "gestao-rural-alertas",
+                "data": {"url": "/lembretes", "count": len(new_notifications)}
+            })
+            
+            dead_subs = []
+            for sub in subscriptions:
+                try:
+                    webpush(
+                        subscription_info={"endpoint": sub["endpoint"], "keys": sub["keys"]},
+                        data=push_data,
+                        vapid_private_key=vapid_private_key,
+                        vapid_claims={"sub": vapid_claims_email}
+                    )
+                except WebPushException as e:
+                    if e.response and e.response.status_code in [404, 410]:
+                        dead_subs.append(sub["endpoint"])
+                except Exception:
+                    pass
+            
+            if dead_subs:
+                await db.push_subscriptions.delete_many({"endpoint": {"$in": dead_subs}})
+    
+    return {"new_notifications": len(new_notifications), "total_alerts": len(alertas)}
+
+
 # ============= APP SETUP =============
 
 app.include_router(api_router)
@@ -1373,6 +1534,7 @@ app.add_middleware(
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_credentials=True,
 )
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -1381,6 +1543,9 @@ logger = logging.getLogger(__name__)
 @app.on_event("startup")
 async def startup_event():
     await db.users.create_index("email", unique=True)
+    await db.push_subscriptions.create_index("endpoint", unique=True)
+    await db.notifications.create_index([("user_id", 1), ("created_at", -1)])
+    await db.notifications.create_index([("user_id", 1), ("alert_key", 1)])
     # Seed admin
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@fazenda.com").lower()
     admin_password = os.environ.get("ADMIN_PASSWORD", "admin123")

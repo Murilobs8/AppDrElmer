@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { ChartLine, Cow, ArrowsLeftRight, Calendar, CurrencyDollar, FileText, List, X, UsersThree, SignOut, Bell } from '@phosphor-icons/react';
+import NotificationBell from './NotificationBell';
 
 const baseNavigation = [
   { name: 'Dashboard', path: '/', icon: ChartLine },
@@ -39,13 +40,18 @@ export default function Layout({ user, onLogout }) {
         <div className="flex flex-col h-full">
           <div className="flex items-center justify-between p-6 border-b border-[#2A3730]">
             <h1 className="text-xl font-semibold text-[#E5E3DB]" data-testid="app-title">Gestao Rural</h1>
-            <button
-              onClick={() => setSidebarOpen(false)}
-              className="lg:hidden text-[#E5E3DB] hover:text-white"
-              data-testid="close-sidebar-btn"
-            >
-              <X size={24} />
-            </button>
+            <div className="flex items-center gap-1">
+              <div className="hidden lg:block">
+                <NotificationBell />
+              </div>
+              <button
+                onClick={() => setSidebarOpen(false)}
+                className="lg:hidden text-[#E5E3DB] hover:text-white"
+                data-testid="close-sidebar-btn"
+              >
+                <X size={24} />
+              </button>
+            </div>
           </div>
 
           {/* User info */}
@@ -90,15 +96,18 @@ export default function Layout({ user, onLogout }) {
       </aside>
 
       <div className="flex-1 flex flex-col">
-        <header className="lg:hidden bg-white border-b border-[#E5E3DB] px-4 py-3 flex items-center">
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="text-[#1B2620] mr-3"
-            data-testid="open-sidebar-btn"
-          >
-            <List size={24} />
-          </button>
-          <h1 className="text-lg font-semibold text-[#1B2620]">Gestao Rural</h1>
+        <header className="lg:hidden bg-white border-b border-[#E5E3DB] px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="text-[#1B2620] mr-3"
+              data-testid="open-sidebar-btn"
+            >
+              <List size={24} />
+            </button>
+            <h1 className="text-lg font-semibold text-[#1B2620]">Gestao Rural</h1>
+          </div>
+          <NotificationBell />
         </header>
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8" data-testid="main-content">
