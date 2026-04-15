@@ -376,6 +376,24 @@ class DespesaBulkCreate(BaseModel):
 class CategoriaBulkCreate(BaseModel):
     categorias: List[dict]
 
+# ============= CALENDARIO VACINACAO =============
+
+class ProtocoloVacinacao(BaseModel):
+    nome: str
+    tipo_acao: str = "vacinacao"
+    mensagem: Optional[str] = ""
+    recorrencia_dias: int
+    idade_min_meses: Optional[int] = None
+    idade_max_meses: Optional[int] = None
+    sexo: Optional[str] = None
+
+class CalendarioVacinacaoCreate(BaseModel):
+    tipo_animal: str
+    protocolos: List[ProtocoloVacinacao]
+
+class CalendarioVacinacaoUpdate(BaseModel):
+    protocolos: List[ProtocoloVacinacao]
+
 # ============= LEMBRETES =============
 
 class LembreteCondicao(BaseModel):
@@ -841,6 +859,131 @@ async def deletar_lembrete(lembrete_id: str):
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Lembrete nao encontrado")
     return {"message": "Lembrete deletado"}
+
+
+# ============= CALENDARIO VACINACAO =============
+
+CALENDARIO_PADRAO = {
+    "Bovino": [
+        {"nome": "Febre Aftosa", "tipo_acao": "vacinacao", "mensagem": "Vacina contra febre aftosa", "recorrencia_dias": 180},
+        {"nome": "Brucelose (femeas)", "tipo_acao": "vacinacao", "mensagem": "Vacina B19 - femeas 3 a 8 meses", "recorrencia_dias": 0, "idade_min_meses": 3, "idade_max_meses": 8, "sexo": "femea"},
+        {"nome": "Raiva Bovina", "tipo_acao": "vacinacao", "mensagem": "Vacina antirrabica", "recorrencia_dias": 365},
+        {"nome": "Clostridiose", "tipo_acao": "vacinacao", "mensagem": "Vacina polivalente contra clostridioses", "recorrencia_dias": 180},
+        {"nome": "Vermifugacao", "tipo_acao": "vermifugacao", "mensagem": "Vermifugo estrategico", "recorrencia_dias": 90},
+        {"nome": "Pesagem de Controle", "tipo_acao": "pesagem", "mensagem": "Pesagem de acompanhamento", "recorrencia_dias": 30},
+    ],
+    "Suino": [
+        {"nome": "Peste Suina", "tipo_acao": "vacinacao", "mensagem": "Vacina contra peste suina classica", "recorrencia_dias": 180},
+        {"nome": "Erisipela", "tipo_acao": "vacinacao", "mensagem": "Vacina contra erisipela suina", "recorrencia_dias": 180},
+        {"nome": "Leptospirose", "tipo_acao": "vacinacao", "mensagem": "Vacina contra leptospirose", "recorrencia_dias": 180},
+        {"nome": "Vermifugacao", "tipo_acao": "vermifugacao", "mensagem": "Vermifugo", "recorrencia_dias": 60},
+    ],
+    "Ovino": [
+        {"nome": "Clostridiose", "tipo_acao": "vacinacao", "mensagem": "Vacina polivalente", "recorrencia_dias": 180},
+        {"nome": "Raiva", "tipo_acao": "vacinacao", "mensagem": "Vacina antirrabica", "recorrencia_dias": 365},
+        {"nome": "Vermifugacao", "tipo_acao": "vermifugacao", "mensagem": "Vermifugo estrategico", "recorrencia_dias": 60},
+    ],
+    "Caprino": [
+        {"nome": "Clostridiose", "tipo_acao": "vacinacao", "mensagem": "Vacina polivalente", "recorrencia_dias": 180},
+        {"nome": "Raiva", "tipo_acao": "vacinacao", "mensagem": "Vacina antirrabica", "recorrencia_dias": 365},
+        {"nome": "Vermifugacao", "tipo_acao": "vermifugacao", "mensagem": "Vermifugo - metodo Famacha", "recorrencia_dias": 45},
+    ],
+    "Equino": [
+        {"nome": "Influenza Equina", "tipo_acao": "vacinacao", "mensagem": "Vacina contra influenza", "recorrencia_dias": 180},
+        {"nome": "Encefalomielite", "tipo_acao": "vacinacao", "mensagem": "Vacina contra encefalomielite", "recorrencia_dias": 365},
+        {"nome": "Raiva", "tipo_acao": "vacinacao", "mensagem": "Vacina antirrabica", "recorrencia_dias": 365},
+        {"nome": "Tetano", "tipo_acao": "vacinacao", "mensagem": "Vacina antitetanica", "recorrencia_dias": 365},
+        {"nome": "Vermifugacao", "tipo_acao": "vermifugacao", "mensagem": "Vermifugo", "recorrencia_dias": 60},
+    ],
+    "Aves": [
+        {"nome": "Newcastle", "tipo_acao": "vacinacao", "mensagem": "Vacina contra doenca de Newcastle", "recorrencia_dias": 90},
+        {"nome": "Gumboro", "tipo_acao": "vacinacao", "mensagem": "Vacina contra Gumboro", "recorrencia_dias": 0, "idade_min_meses": 0, "idade_max_meses": 3},
+    ],
+}
+
+@api_router.get("/calendario-vacinacao")
+async def listar_calendarios():
+    docs = await db.calendario_vacinacao.find({}, {"_id": 0}).to_list(100)
+    return docs
+
+@api_router.get("/calendario-vacinacao/{tipo_animal}")
+async def obter_calendario(tipo_animal: str):
+    doc = await db.calendario_vacinacao.find_one({"tipo_animal": tipo_animal}, {"_id": 0})
+    if not doc:
+        padrao = CALENDARIO_PADRAO.get(tipo_animal, [])
+        return {"tipo_animal": tipo_animal, "protocolos": padrao, "personalizado": False}
+    return {**doc, "personalizado": True}
+
+@api_router.put("/calendario-vacinacao/{tipo_animal}")
+async def salvar_calendario(tipo_animal: str, input: CalendarioVacinacaoUpdate):
+    protocolos = [p.model_dump() for p in input.protocolos]
+    await db.calendario_vacinacao.update_one(
+        {"tipo_animal": tipo_animal},
+        {"$set": {"tipo_animal": tipo_animal, "protocolos": protocolos, "updated_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=True
+    )
+    return {"message": f"Calendario de {tipo_animal} salvo", "total_protocolos": len(protocolos)}
+
+@api_router.delete("/calendario-vacinacao/{tipo_animal}")
+async def resetar_calendario(tipo_animal: str):
+    await db.calendario_vacinacao.delete_one({"tipo_animal": tipo_animal})
+    return {"message": f"Calendario de {tipo_animal} resetado para padrao"}
+
+@api_router.post("/calendario-vacinacao/aplicar/{tipo_animal}")
+async def aplicar_calendario(tipo_animal: str):
+    """Gera lembretes automaticos baseado no calendario para o tipo de animal"""
+    doc = await db.calendario_vacinacao.find_one({"tipo_animal": tipo_animal}, {"_id": 0})
+    protocolos = doc["protocolos"] if doc else CALENDARIO_PADRAO.get(tipo_animal, [])
+    
+    if not protocolos:
+        return {"message": "Nenhum protocolo encontrado", "criados": 0, "existentes": 0}
+    
+    criados = 0
+    existentes = 0
+    for p in protocolos:
+        nome_lembrete = f"[Auto] {p['nome']} - {tipo_animal}"
+        existing = await db.lembretes.find_one({"nome": nome_lembrete})
+        if existing:
+            existentes += 1
+            continue
+        
+        condicoes = {"tipo_animal": tipo_animal, "status": "ativo"}
+        if p.get("sexo"):
+            condicoes["sexo"] = p["sexo"]
+        if p.get("idade_min_meses"):
+            condicoes["idade_min_meses"] = p["idade_min_meses"]
+        if p.get("idade_max_meses"):
+            condicoes["idade_max_meses"] = p["idade_max_meses"]
+        
+        lembrete = {
+            "id": str(uuid.uuid4()),
+            "nome": nome_lembrete,
+            "tipo_acao": p.get("tipo_acao", "vacinacao"),
+            "condicoes": condicoes,
+            "mensagem": p.get("mensagem", ""),
+            "recorrencia_dias": p.get("recorrencia_dias") or None,
+            "ativo": True,
+            "auto_gerado": True,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.lembretes.insert_one(lembrete)
+        criados += 1
+    
+    return {"message": f"Calendario aplicado para {tipo_animal}", "criados": criados, "existentes": existentes}
+
+@api_router.get("/calendario-vacinacao/tipos-padrao/listar")
+async def listar_tipos_padrao():
+    """Retorna tipos de animais que tem calendario padrao"""
+    result = {}
+    for tipo, protocolos in CALENDARIO_PADRAO.items():
+        custom = await db.calendario_vacinacao.find_one({"tipo_animal": tipo}, {"_id": 0})
+        lembretes_ativos = await db.lembretes.count_documents({"nome": {"$regex": f"\\[Auto\\].*{tipo}$"}, "ativo": True})
+        result[tipo] = {
+            "total_protocolos": len(custom["protocolos"]) if custom else len(protocolos),
+            "personalizado": bool(custom),
+            "lembretes_ativos": lembretes_ativos
+        }
+    return result
 
 @api_router.get("/lembretes/alertas")
 async def verificar_alertas():
