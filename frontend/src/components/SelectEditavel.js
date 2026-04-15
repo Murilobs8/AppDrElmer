@@ -16,7 +16,7 @@ export default function SelectEditavel({ campo, value, onValueChange, placeholde
   const [editandoId, setEditandoId] = useState(null);
   const [editandoValor, setEditandoValor] = useState('');
 
-  useEffect(() => { carregarOpcoes(); }, [campo]);
+  useEffect(() => { carregarOpcoes(); }, [campo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const carregarOpcoes = async () => {
     try {
