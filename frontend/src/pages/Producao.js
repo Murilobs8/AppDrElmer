@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import api from '../lib/api';
 import { emit, on, EVENTS } from '../lib/eventBus';
-import { Plus, Trash, Pencil, ListPlus, Drop } from '@phosphor-icons/react';
+import { Plus, Trash, Pencil, ListPlus, Drop, TrendUp, CurrencyCircleDollar, Package } from '@phosphor-icons/react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -9,6 +9,7 @@ import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import SelectEditavel from '../components/SelectEditavel';
 import { usePagination, PaginationBar } from '../components/Pagination';
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, BarChart, Bar, Cell } from 'recharts';
 import { toast } from 'sonner';
 
 const MOTIVOS_PRODUCAO = ['leite', 'ovos', 'la', 'mel', 'aluguel_pasto', 'servico_reproducao', 'adubo', 'couro', 'outros'];
@@ -121,6 +122,68 @@ export default function Producao() {
   const totalValor = producoes.reduce((s, p) => s + (p.valor || 0), 0);
   const pag = usePagination(producoes, 100);
 
+  // ============ MINI DASHBOARD ============
+  const stats = useMemo(() => {
+    const hoje = new Date();
+    const mesAtual = hoje.toISOString().slice(0, 7);
+    const ano = hoje.getFullYear();
+
+    let totalMes = 0, totalAno = 0, qtdMes = 0, qtdAno = 0, qtdTotal = 0;
+    const valorTotal = producoes.reduce((s, p) => s + (p.valor || 0), 0);
+
+    for (const p of producoes) {
+      const d = String(p.data || '');
+      qtdTotal += 1;
+      if (d.startsWith(mesAtual)) { totalMes += p.valor || 0; qtdMes += 1; }
+      if (d.startsWith(String(ano))) { totalAno += p.valor || 0; qtdAno += 1; }
+    }
+
+    // Últimos 12 meses, valor por motivo (agregado)
+    const months = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      months.push({ key, label: d.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }) });
+    }
+    const motivosSet = new Set(producoes.map(p => p.motivo));
+    const motivos = Array.from(motivosSet);
+    const serie = months.map(m => {
+      const row = { mes: m.label };
+      for (const mt of motivos) row[mt] = 0;
+      row._total = 0;
+      for (const p of producoes) {
+        if (String(p.data || '').startsWith(m.key)) {
+          row[p.motivo] = (row[p.motivo] || 0) + (p.valor || 0);
+          row._total += p.valor || 0;
+        }
+      }
+      return row;
+    });
+
+    // Por motivo (valor acumulado total)
+    const porMotivo = Object.values(
+      producoes.reduce((acc, p) => {
+        if (!acc[p.motivo]) acc[p.motivo] = { motivo: MOTIVO_LABELS[p.motivo] || p.motivo, valor: 0, quantidade: 0 };
+        acc[p.motivo].valor += p.valor || 0;
+        acc[p.motivo].quantidade += p.quantidade || 0;
+        return acc;
+      }, {})
+    ).sort((a, b) => b.valor - a.valor);
+
+    // Média mensal (últimos 12 meses com dados)
+    const mesesComDados = serie.filter(r => r._total > 0).length;
+    const mediaMensal = mesesComDados > 0 ? serie.reduce((s, r) => s + r._total, 0) / mesesComDados : 0;
+
+    return { totalMes, totalAno, qtdMes, qtdAno, qtdTotal, valorTotal, serie, motivos, porMotivo, mediaMensal };
+  }, [producoes]);
+
+  const MOTIVO_CORES = {
+    leite: '#4A6741', ovos: '#D99B29', la: '#8B7355', mel: '#E8A87C',
+    aluguel_pasto: '#6B8E9E', servico_reproducao: '#C25934', adubo: '#5A4A3A',
+    couro: '#A47148', outros: '#7A8780'
+  };
+  const corMotivo = (m) => MOTIVO_CORES[m] || '#4A6741';
+
   if (loading) return <div className="flex justify-center items-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#4A6741]"></div></div>;
 
   return (
@@ -223,6 +286,96 @@ export default function Producao() {
           </Dialog>
         </div>
       </div>
+
+      {/* ============ MINI DASHBOARD ============ */}
+      {producoes.length > 0 && (
+        <div className="space-y-4 mb-6" data-testid="producao-dashboard">
+          {/* KPI Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="bg-white dark:bg-[#1B2620] rounded-xl border border-[#E5E3DB] dark:border-[#2A3530] p-4">
+              <div className="flex items-center gap-2 text-xs text-[#7A8780] uppercase tracking-wider mb-1">
+                <CurrencyCircleDollar size={14} weight="fill" className="text-[#4A6741]" /> Este mês
+              </div>
+              <p className="text-2xl font-bold text-[#1B2620] dark:text-[#E5E3DB]">R$ {stats.totalMes.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+              <p className="text-xs text-[#7A8780] mt-0.5">{stats.qtdMes} registro(s)</p>
+            </div>
+            <div className="bg-white dark:bg-[#1B2620] rounded-xl border border-[#E5E3DB] dark:border-[#2A3530] p-4">
+              <div className="flex items-center gap-2 text-xs text-[#7A8780] uppercase tracking-wider mb-1">
+                <CurrencyCircleDollar size={14} weight="fill" className="text-[#D99B29]" /> Este ano
+              </div>
+              <p className="text-2xl font-bold text-[#1B2620] dark:text-[#E5E3DB]">R$ {stats.totalAno.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+              <p className="text-xs text-[#7A8780] mt-0.5">{stats.qtdAno} registro(s)</p>
+            </div>
+            <div className="bg-white dark:bg-[#1B2620] rounded-xl border border-[#E5E3DB] dark:border-[#2A3530] p-4">
+              <div className="flex items-center gap-2 text-xs text-[#7A8780] uppercase tracking-wider mb-1">
+                <TrendUp size={14} weight="fill" className="text-[#6B8E9E]" /> Média mensal
+              </div>
+              <p className="text-2xl font-bold text-[#1B2620] dark:text-[#E5E3DB]">R$ {stats.mediaMensal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+              <p className="text-xs text-[#7A8780] mt-0.5">últimos 12 meses</p>
+            </div>
+            <div className="bg-white dark:bg-[#1B2620] rounded-xl border border-[#E5E3DB] dark:border-[#2A3530] p-4">
+              <div className="flex items-center gap-2 text-xs text-[#7A8780] uppercase tracking-wider mb-1">
+                <Package size={14} weight="fill" className="text-[#C25934]" /> Total acumulado
+              </div>
+              <p className="text-2xl font-bold text-[#1B2620] dark:text-[#E5E3DB]">R$ {stats.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+              <p className="text-xs text-[#7A8780] mt-0.5">{stats.qtdTotal} registro(s)</p>
+            </div>
+          </div>
+
+          {/* Charts */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+            {/* Linha: evolução 12 meses por motivo */}
+            <div className="lg:col-span-2 bg-white dark:bg-[#1B2620] rounded-xl border border-[#E5E3DB] dark:border-[#2A3530] p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <p className="text-xs font-semibold text-[#7A8780] uppercase tracking-wider">Evolução mensal</p>
+                  <p className="text-sm font-bold text-[#1B2620] dark:text-[#E5E3DB]">últimos 12 meses · R$ por motivo</p>
+                </div>
+              </div>
+              <ResponsiveContainer width="100%" height={220}>
+                <LineChart data={stats.serie} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E3DB" opacity={0.4} />
+                  <XAxis dataKey="mes" tick={{ fontSize: 11, fill: '#7A8780' }} />
+                  <YAxis tick={{ fontSize: 11, fill: '#7A8780' }} tickFormatter={(v) => `R$${v >= 1000 ? (v/1000).toFixed(0) + 'k' : v}`} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#FFF', border: '1px solid #E5E3DB', borderRadius: 8, fontSize: 12 }}
+                    formatter={(v, name) => [`R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, MOTIVO_LABELS[name] || name]}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 11 }} formatter={(v) => MOTIVO_LABELS[v] || v} />
+                  {stats.motivos.map(m => (
+                    <Line key={m} type="monotone" dataKey={m} stroke={corMotivo(m)} strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Barras: distribuição por motivo */}
+            <div className="bg-white dark:bg-[#1B2620] rounded-xl border border-[#E5E3DB] dark:border-[#2A3530] p-4">
+              <div className="mb-3">
+                <p className="text-xs font-semibold text-[#7A8780] uppercase tracking-wider">Por motivo</p>
+                <p className="text-sm font-bold text-[#1B2620] dark:text-[#E5E3DB]">Distribuição · R$ total</p>
+              </div>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={stats.porMotivo} layout="vertical" margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E3DB" opacity={0.4} horizontal={false} />
+                  <XAxis type="number" tick={{ fontSize: 11, fill: '#7A8780' }} tickFormatter={(v) => `R$${v >= 1000 ? (v/1000).toFixed(0) + 'k' : v}`} />
+                  <YAxis type="category" dataKey="motivo" tick={{ fontSize: 11, fill: '#7A8780' }} width={90} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#FFF', border: '1px solid #E5E3DB', borderRadius: 8, fontSize: 12 }}
+                    formatter={(v) => [`R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 'Total']}
+                  />
+                  <Bar dataKey="valor" radius={[0, 4, 4, 0]}>
+                    {stats.porMotivo.map((entry, i) => {
+                      const key = stats.motivos.find(m => (MOTIVO_LABELS[m] || m) === entry.motivo) || entry.motivo.toLowerCase();
+                      return <Cell key={i} fill={corMotivo(key)} />;
+                    })}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-lg border border-[#E5E3DB] overflow-hidden" data-testid="producoes-table">
         <div className="overflow-x-auto">
