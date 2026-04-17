@@ -41,6 +41,88 @@ h1, h2, h3, h4, h5, h6 {
         --ring: 106 21% 34%;
         --radius: 0.5rem;
     }
+
+    .dark {
+        --background: 150 15% 8%;
+        --foreground: 40 13% 89%;
+        --card: 150 15% 12%;
+        --card-foreground: 40 13% 89%;
+        --popover: 150 15% 12%;
+        --popover-foreground: 40 13% 89%;
+        --primary: 106 30% 55%;
+        --primary-foreground: 150 15% 8%;
+        --secondary: 17 58% 55%;
+        --secondary-foreground: 0 0% 100%;
+        --muted: 150 10% 18%;
+        --muted-foreground: 138 8% 65%;
+        --accent: 106 30% 55%;
+        --accent-foreground: 150 15% 8%;
+        --destructive: 0 62% 50%;
+        --destructive-foreground: 40 13% 89%;
+        --border: 150 10% 22%;
+        --input: 150 10% 22%;
+        --ring: 106 30% 55%;
+    }
+
+    .dark body { background-color: #0F1612; color: #E5E3DB; }
+
+    /* Overrides de cores hardcoded do app no modo escuro */
+    .dark .bg-white,
+    .dark .bg-\[\#FDFCFB\],
+    .dark .bg-\[\#FFFDF8\],
+    .dark .bg-\[\#FAFAF7\] { background-color: #1B2620 !important; }
+
+    .dark .bg-\[\#F4F3F0\],
+    .dark .bg-\[\#F5F0E8\],
+    .dark .bg-\[\#EDE7D9\] { background-color: #141C18 !important; }
+
+    .dark .bg-\[\#E8F0E6\] { background-color: #1E2A1E !important; }
+    .dark .bg-\[\#E5E3DB\] { background-color: #2A3530 !important; }
+
+    /* Textos */
+    .dark .text-\[\#1B2620\],
+    .dark .text-\[\#2F1810\],
+    .dark .text-\[\#3A453F\] { color: #E5E3DB !important; }
+
+    .dark .text-\[\#7A8780\] { color: #8FA099 !important; }
+
+    /* Bordas */
+    .dark .border-\[\#E5E3DB\],
+    .dark .border-\[\#E8DCC8\] { border-color: #2A3530 !important; }
+
+    /* Tabelas - linhas hover */
+    .dark tr.hover\:bg-\[\#FDFCFB\]:hover,
+    .dark tr.hover\:bg-\[\#FFFDF8\]:hover { background-color: #243029 !important; }
+
+    /* Dialogs Radix */
+    .dark [role="dialog"] { background-color: #1B2620 !important; color: #E5E3DB !important; }
+
+    /* Inputs - mantém visual consistente */
+    .dark input,
+    .dark textarea,
+    .dark select { background-color: #141C18 !important; color: #E5E3DB !important; border-color: #2A3530 !important; }
+    .dark input::placeholder { color: #6B7A73 !important; }
+
+    /* Select Radix (dropdown) */
+    .dark [role="combobox"],
+    .dark [data-radix-select-trigger] { background-color: #141C18 !important; color: #E5E3DB !important; border-color: #2A3530 !important; }
+    .dark [data-radix-select-content] { background-color: #1B2620 !important; color: #E5E3DB !important; border-color: #2A3530 !important; }
+    .dark [data-radix-select-item]:hover,
+    .dark [data-radix-select-item][data-highlighted] { background-color: #243029 !important; }
+
+    /* Badges coloridos (manter) - verdes/marrons no dark ficam OK */
+    .dark .bg-\[\#4A6741\] { background-color: #5A7751 !important; }
+
+    /* Cards com backgrounds customizados claros viram escuros */
+    .dark .bg-amber-50 { background-color: #2A2418 !important; }
+    .dark .bg-red-50 { background-color: #2E1A1A !important; }
+    .dark .bg-green-50 { background-color: #1A2E1A !important; }
+    .dark .bg-blue-50 { background-color: #1A1F2E !important; }
+    .dark .bg-pink-50 { background-color: #2E1A24 !important; }
+
+    /* Links/botões ativos */
+    .dark .hover\:bg-\[\#F5F0E8\]:hover { background-color: #243029 !important; }
+    .dark .hover\:bg-\[\#4A6741\]\/10:hover { background-color: rgba(90, 119, 81, 0.15) !important; }
 }
 
 @layer base {

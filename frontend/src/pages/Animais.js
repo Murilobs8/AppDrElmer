@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import api from '../lib/api';
 import { emit, on, EVENTS } from '../lib/eventBus';
+import { usePagination, PaginationBar } from '../components/Pagination';
 import { Plus, Trash, Pencil, CopySimple, Funnel, CheckSquare, Square, Syringe, ClockCounterClockwise, X } from '@phosphor-icons/react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
 import { Button } from '../components/ui/button';
@@ -186,6 +187,8 @@ export default function Animais() {
   }, [animais, filtroTag, filtroPrefixo, filtroTipo, filtroSexo, filtroStatus, filtroIdadeMin, filtroIdadeMax, filtroPesoMin, filtroPesoMax, filtroEvento, todosEventos]);
 
   const femeas = animais.filter(a => a.sexo === 'femea' && a.status === 'ativo');
+
+  const pag = usePagination(animaisFiltrados, 100);
 
   const todosSelec = animaisFiltrados.length > 0 && animaisFiltrados.every(a => selecionados.has(a.id));
 
@@ -602,7 +605,7 @@ export default function Animais() {
             <tbody>
               {animaisFiltrados.length === 0 ? (
                 <tr><td colSpan="9" className="px-6 py-12 text-center text-[#7A8780]">Nenhum animal encontrado</td></tr>
-              ) : animaisFiltrados.map((animal) => (
+              ) : pag.paginated.map((animal) => (
                 <React.Fragment key={animal.id}>
                   <tr onClick={() => toggleHistorico(animal)} className={`table-row border-b border-[#E5E3DB] cursor-pointer transition-colors ${expandidoId === animal.id ? 'bg-[#F5F0E8] border-b-0' : selecionados.has(animal.id) ? 'bg-[#E8F0E6]' : 'hover:bg-[#FDFCFB]'}`}>
                     <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
@@ -745,6 +748,7 @@ export default function Animais() {
             </tbody>
           </table>
         </div>
+        <PaginationBar {...pag} label="animais" />
       </div>
     </div>
   );

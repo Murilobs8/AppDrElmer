@@ -23,8 +23,28 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
-import bcrypt
-import jwt
+import jwt  # usado no refresh_token endpoint
+
+# Módulos extraídos (refatoração v2: reduz server.py de 2063 → ~1400 linhas)
+from models import (
+    LoginInput, RegisterUserInput, UpdateUserInput, UserResponse,
+    CategoriaCreate, Categoria, OpcaoCreate, Opcao, CategoriaBulkCreate,
+    AnimalCreate, AnimalBulkCreate, Animal,
+    MovimentacaoCreate, Movimentacao, MovimentacaoBulkCreate,
+    EntradaAnimalCreate, EntradaAnimalBulkCreate,
+    ProducaoCreate, Producao, ProducaoBulkCreate,
+    EventoCreate, EventoBulkCreate, Evento,
+    DespesaCreate, Despesa, DespesaBulkCreate,
+    ProtocoloVacinacao, CalendarioVacinacaoCreate, CalendarioVacinacaoUpdate,
+    LembreteCondicao, LembreteCreate, Lembrete,
+    DashboardStats,
+)
+from helpers import serialize_doc, prepare_for_db
+from security import (
+    JWT_ALGORITHM, get_jwt_secret, hash_password, verify_password,
+    create_access_token, create_refresh_token, get_current_user, require_admin,
+)
+from constants import CALENDARIO_PADRAO
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
@@ -33,88 +53,6 @@ db = client[os.environ['DB_NAME']]
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
-
-JWT_ALGORITHM = "HS256"
-
-def get_jwt_secret():
-    secret = os.environ.get("JWT_SECRET")
-    if not secret:
-        secret = "default-secret-change-me-in-production"
-    return secret
-
-# ============= AUTH HELPERS =============
-
-def hash_password(password: str) -> str:
-    salt = bcrypt.gensalt()
-    hashed = bcrypt.hashpw(password.encode("utf-8"), salt)
-    return hashed.decode("utf-8")
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
-
-def create_access_token(user_id: str, email: str) -> str:
-    payload = {"sub": user_id, "email": email, "exp": datetime.now(timezone.utc) + timedelta(hours=24), "type": "access"}
-    return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
-
-def create_refresh_token(user_id: str) -> str:
-    payload = {"sub": user_id, "exp": datetime.now(timezone.utc) + timedelta(days=7), "type": "refresh"}
-    return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
-
-async def get_current_user(request: Request) -> dict:
-    token = request.cookies.get("access_token")
-    if not token:
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            token = auth_header[7:]
-    if not token:
-        raise HTTPException(status_code=401, detail="Nao autenticado")
-    try:
-        payload = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
-        if payload.get("type") != "access":
-            raise HTTPException(status_code=401, detail="Token invalido")
-        user_id = payload["sub"]
-        user = await db.users.find_one({"id": user_id}, {"_id": 0})
-        if not user:
-            raise HTTPException(status_code=401, detail="Usuario nao encontrado")
-        user.pop("password_hash", None)
-        return user
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token expirado")
-    except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Token invalido")
-
-async def require_admin(request: Request) -> dict:
-    user = await get_current_user(request)
-    if user.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Acesso negado. Somente administradores.")
-    return user
-
-
-# ============= AUTH MODELS =============
-
-class LoginInput(BaseModel):
-    email: str
-    password: str
-
-class RegisterUserInput(BaseModel):
-    nome: str
-    email: str
-    password: str
-    role: str = "user"
-
-class UpdateUserInput(BaseModel):
-    nome: str
-    email: str
-    password: Optional[str] = None
-    role: str = "user"
-
-class UserResponse(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-    id: str
-    nome: str
-    email: str
-    role: str
-    created_at: datetime
 
 
 # ============= AUTH ENDPOINTS =============
@@ -228,301 +166,6 @@ async def atualizar_usuario(user_id: str, input: UpdateUserInput, request: Reque
     return doc
 
 
-# ============= EXISTING MODELS =============
-
-class CategoriaCreate(BaseModel):
-    nome: str
-    cor: str = "#4A6741"
-
-class Categoria(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    nome: str
-    cor: str
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-class OpcaoCreate(BaseModel):
-    campo: str
-    valor: str
-
-class Opcao(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    campo: str
-    valor: str
-
-class MovimentacaoBulkCreate(BaseModel):
-    tipo: Literal["entrada", "saida"]
-    motivo: str
-    tag_prefixo: str
-    tag_inicio: int
-    tag_fim: int
-    data: date
-    valor: Optional[float] = None
-    observacoes: Optional[str] = ""
-
-
-# Entrada unificada: cria animal + movimentação atomicamente
-class EntradaAnimalCreate(BaseModel):
-    # Animal
-    tipo_animal: str  # Bovino, Suino, etc.
-    tag: str
-    sexo: Optional[str] = None
-    genitora_id: Optional[str] = None
-    data_nascimento: Optional[date] = None
-    peso_atual: Optional[float] = None
-    peso_tipo: Optional[str] = "aferido"
-    # Movimentação
-    motivo: str  # compra, nascimento, doacao, transferencia
-    data: date
-    valor: Optional[float] = None
-    observacoes: Optional[str] = ""
-
-
-class EntradaAnimalBulkCreate(BaseModel):
-    # Animal (em massa)
-    tipo_animal: str
-    tag_inicial: str  # ex: BOV-001
-    quantidade: int
-    sexo: Optional[str] = None
-    data_nascimento: Optional[date] = None
-    peso_atual: Optional[float] = None
-    peso_tipo: Optional[str] = "estimado"
-    # Movimentação
-    motivo: str  # compra, nascimento, doacao, transferencia
-    data: date
-    valor: Optional[float] = None  # valor por animal
-    observacoes: Optional[str] = ""
-
-class AnimalCreate(BaseModel):
-    tipo: str
-    tag: str
-    sexo: Optional[str] = None
-    genitora_id: Optional[str] = None
-    data_nascimento: Optional[date] = None
-    peso_atual: Optional[float] = None
-    peso_tipo: Optional[str] = "efetivo"
-    observacoes: Optional[str] = ""
-
-class AnimalBulkCreate(BaseModel):
-    tipo: str
-    tag_inicial: str
-    quantidade: int
-    sexo: Optional[str] = None
-    data_nascimento: Optional[date] = None
-    peso_atual: Optional[float] = None
-    peso_tipo: Optional[str] = "estimado"
-    observacoes: Optional[str] = ""
-
-class Animal(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    tipo: str
-    tag: str
-    sexo: Optional[str] = None
-    genitora_id: Optional[str] = None
-    data_nascimento: Optional[date] = None
-    peso_atual: Optional[float] = None
-    peso_tipo: Optional[str] = "efetivo"
-    observacoes: Optional[str] = ""
-    status: str = "ativo"
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-class MovimentacaoCreate(BaseModel):
-    tipo: Literal["entrada", "saida"]
-    motivo: str
-    animal_id: Optional[str] = None
-    data: date
-    valor: Optional[float] = None
-    quantidade: float = 1
-    unidade: Optional[str] = None
-    tipo_animal: Optional[str] = None
-    observacoes: Optional[str] = ""
-
-class Movimentacao(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    tipo: Literal["entrada", "saida", "producao"]  # producao aceita em leitura para compat
-    motivo: str
-    animal_id: Optional[str] = None
-    data: date
-    valor: Optional[float] = None
-    quantidade: float = 1
-    unidade: Optional[str] = None
-    tipo_animal: Optional[str] = None
-    observacoes: Optional[str] = ""
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-# ============= PRODUCAO =============
-class ProducaoCreate(BaseModel):
-    motivo: str  # leite, ovos, mel, la, aluguel_pasto, servico_reproducao, adubo, couro, outros
-    data: date
-    valor: Optional[float] = None
-    quantidade: float = 1
-    unidade: Optional[str] = None
-    tipo_animal: Optional[str] = None
-    observacoes: Optional[str] = ""
-
-class Producao(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    motivo: str
-    data: date
-    valor: Optional[float] = None
-    quantidade: float = 1
-    unidade: Optional[str] = None
-    tipo_animal: Optional[str] = None
-    observacoes: Optional[str] = ""
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-class ProducaoBulkCreate(BaseModel):
-    motivo: str
-    quantidade_registros: int
-    data_inicio: date
-    data_fim: Optional[date] = None
-    valor: Optional[float] = None
-    quantidade: float = 1
-    unidade: Optional[str] = None
-    tipo_animal: Optional[str] = None
-    observacoes: Optional[str] = ""
-    recorrente: bool = False  # se True, repete mensalmente
-
-class EventoCreate(BaseModel):
-    tipo: str
-    animal_id: str
-    data: date
-    detalhes: Optional[str] = ""
-    peso: Optional[float] = None
-    vacina: Optional[str] = None
-
-class EventoBulkCreate(BaseModel):
-    tipo: str
-    tag_prefixo: str
-    tag_inicio: int
-    tag_fim: int
-    data: date
-    detalhes: Optional[str] = ""
-    peso: Optional[float] = None
-    vacina: Optional[str] = None
-
-class Evento(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    tipo: str
-    animal_id: str
-    data: date
-    detalhes: Optional[str] = ""
-    peso: Optional[float] = None
-    vacina: Optional[str] = None
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-class DespesaCreate(BaseModel):
-    categoria_id: str
-    valor: float
-    data: date
-    descricao: Optional[str] = ""
-
-class Despesa(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    categoria_id: str
-    valor: float
-    data: date
-    descricao: Optional[str] = ""
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-class DespesaBulkCreate(BaseModel):
-    categoria_id: str
-    quantidade: int
-    valor: float
-    data_inicio: date
-    data_fim: Optional[date] = None
-    descricao: Optional[str] = ""
-    recorrente: bool = False
-
-class CategoriaBulkCreate(BaseModel):
-    categorias: List[dict]
-
-# ============= CALENDARIO VACINACAO =============
-
-class ProtocoloVacinacao(BaseModel):
-    nome: str
-    tipo_acao: str = "vacinacao"
-    mensagem: Optional[str] = ""
-    recorrencia_dias: int
-    idade_min_meses: Optional[int] = None
-    idade_max_meses: Optional[int] = None
-    sexo: Optional[str] = None
-
-class CalendarioVacinacaoCreate(BaseModel):
-    tipo_animal: str
-    protocolos: List[ProtocoloVacinacao]
-
-class CalendarioVacinacaoUpdate(BaseModel):
-    protocolos: List[ProtocoloVacinacao]
-
-# ============= LEMBRETES =============
-
-class LembreteCondicao(BaseModel):
-    tipo_animal: Optional[str] = None
-    sexo: Optional[str] = None
-    idade_min_meses: Optional[int] = None
-    idade_max_meses: Optional[int] = None
-    peso_min: Optional[float] = None
-    peso_max: Optional[float] = None
-    status: Optional[str] = "ativo"
-
-class LembreteCreate(BaseModel):
-    nome: str
-    tipo_acao: str
-    condicoes: LembreteCondicao = LembreteCondicao()
-    mensagem: Optional[str] = ""
-    recorrencia_dias: Optional[int] = None
-    ativo: bool = True
-
-class Lembrete(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    nome: str
-    tipo_acao: str
-    condicoes: dict = {}
-    mensagem: Optional[str] = ""
-    recorrencia_dias: Optional[int] = None
-    ativo: bool = True
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-class DashboardStats(BaseModel):
-    total_animais: int
-    total_ativos: int
-    total_vendidos: int
-    total_mortos: int
-    receitas: float
-    despesas: float
-    lucro: float
-    movimentacoes_mes: List[dict]
-    despesas_por_categoria: List[dict]
-
-
-# ============= HELPERS =============
-
-def serialize_doc(doc):
-    if isinstance(doc.get('created_at'), str):
-        doc['created_at'] = datetime.fromisoformat(doc['created_at'])
-    if isinstance(doc.get('data'), str):
-        doc['data'] = date.fromisoformat(doc['data'])
-    if isinstance(doc.get('data_nascimento'), str):
-        doc['data_nascimento'] = date.fromisoformat(doc['data_nascimento'])
-    return doc
-
-def prepare_for_db(doc):
-    result = doc.copy()
-    if 'created_at' in result and isinstance(result['created_at'], datetime):
-        result['created_at'] = result['created_at'].isoformat()
-    if 'data' in result and isinstance(result['data'], date):
-        result['data'] = result['data'].isoformat()
-    if 'data_nascimento' in result and result['data_nascimento'] and isinstance(result['data_nascimento'], date):
-        result['data_nascimento'] = result['data_nascimento'].isoformat()
-    return result
 
 
 # ============= CATEGORIAS =============
@@ -1147,43 +790,6 @@ async def deletar_lembrete(lembrete_id: str):
 
 # ============= CALENDARIO VACINACAO =============
 
-CALENDARIO_PADRAO = {
-    "Bovino": [
-        {"nome": "Febre Aftosa", "tipo_acao": "vacinacao", "mensagem": "Vacina contra febre aftosa", "recorrencia_dias": 180},
-        {"nome": "Brucelose (femeas)", "tipo_acao": "vacinacao", "mensagem": "Vacina B19 - femeas 3 a 8 meses", "recorrencia_dias": 0, "idade_min_meses": 3, "idade_max_meses": 8, "sexo": "femea"},
-        {"nome": "Raiva Bovina", "tipo_acao": "vacinacao", "mensagem": "Vacina antirrabica", "recorrencia_dias": 365},
-        {"nome": "Clostridiose", "tipo_acao": "vacinacao", "mensagem": "Vacina polivalente contra clostridioses", "recorrencia_dias": 180},
-        {"nome": "Vermifugacao", "tipo_acao": "vermifugacao", "mensagem": "Vermifugo estrategico", "recorrencia_dias": 90},
-        {"nome": "Pesagem de Controle", "tipo_acao": "pesagem", "mensagem": "Pesagem de acompanhamento", "recorrencia_dias": 30},
-    ],
-    "Suino": [
-        {"nome": "Peste Suina", "tipo_acao": "vacinacao", "mensagem": "Vacina contra peste suina classica", "recorrencia_dias": 180},
-        {"nome": "Erisipela", "tipo_acao": "vacinacao", "mensagem": "Vacina contra erisipela suina", "recorrencia_dias": 180},
-        {"nome": "Leptospirose", "tipo_acao": "vacinacao", "mensagem": "Vacina contra leptospirose", "recorrencia_dias": 180},
-        {"nome": "Vermifugacao", "tipo_acao": "vermifugacao", "mensagem": "Vermifugo", "recorrencia_dias": 60},
-    ],
-    "Ovino": [
-        {"nome": "Clostridiose", "tipo_acao": "vacinacao", "mensagem": "Vacina polivalente", "recorrencia_dias": 180},
-        {"nome": "Raiva", "tipo_acao": "vacinacao", "mensagem": "Vacina antirrabica", "recorrencia_dias": 365},
-        {"nome": "Vermifugacao", "tipo_acao": "vermifugacao", "mensagem": "Vermifugo estrategico", "recorrencia_dias": 60},
-    ],
-    "Caprino": [
-        {"nome": "Clostridiose", "tipo_acao": "vacinacao", "mensagem": "Vacina polivalente", "recorrencia_dias": 180},
-        {"nome": "Raiva", "tipo_acao": "vacinacao", "mensagem": "Vacina antirrabica", "recorrencia_dias": 365},
-        {"nome": "Vermifugacao", "tipo_acao": "vermifugacao", "mensagem": "Vermifugo - metodo Famacha", "recorrencia_dias": 45},
-    ],
-    "Equino": [
-        {"nome": "Influenza Equina", "tipo_acao": "vacinacao", "mensagem": "Vacina contra influenza", "recorrencia_dias": 180},
-        {"nome": "Encefalomielite", "tipo_acao": "vacinacao", "mensagem": "Vacina contra encefalomielite", "recorrencia_dias": 365},
-        {"nome": "Raiva", "tipo_acao": "vacinacao", "mensagem": "Vacina antirrabica", "recorrencia_dias": 365},
-        {"nome": "Tetano", "tipo_acao": "vacinacao", "mensagem": "Vacina antitetanica", "recorrencia_dias": 365},
-        {"nome": "Vermifugacao", "tipo_acao": "vermifugacao", "mensagem": "Vermifugo", "recorrencia_dias": 60},
-    ],
-    "Aves": [
-        {"nome": "Newcastle", "tipo_acao": "vacinacao", "mensagem": "Vacina contra doenca de Newcastle", "recorrencia_dias": 90},
-        {"nome": "Gumboro", "tipo_acao": "vacinacao", "mensagem": "Vacina contra Gumboro", "recorrencia_dias": 0, "idade_min_meses": 0, "idade_max_meses": 3},
-    ],
-}
 
 @api_router.get("/calendario-vacinacao")
 async def listar_calendarios():

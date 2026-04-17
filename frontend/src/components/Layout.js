@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { ChartLine, Cow, ArrowsLeftRight, Calendar, CurrencyDollar, FileText, List, X, UsersThree, SignOut, Bell, Drop } from '@phosphor-icons/react';
+import { useTheme } from 'next-themes';
+import { ChartLine, Cow, ArrowsLeftRight, Calendar, CurrencyDollar, FileText, List, X, UsersThree, SignOut, Bell, Drop, Sun, Moon, MagnifyingGlass } from '@phosphor-icons/react';
 import NotificationBell from './NotificationBell';
+import CommandPalette from './CommandPalette';
 
 const baseNavigation = [
   { name: 'Dashboard', path: '/', icon: ChartLine },
@@ -17,6 +19,20 @@ const baseNavigation = [
 export default function Layout({ user, onLogout }) {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [cmdOpen, setCmdOpen] = useState(false);
+  const { theme, setTheme } = useTheme();
+
+  // Atalho Ctrl+K / ⌘K para abrir busca global
+  React.useEffect(() => {
+    const handler = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setCmdOpen(true);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
 
   const navigation = user?.role === 'admin'
     ? [...baseNavigation, { name: 'Usuarios', path: '/usuarios', icon: UsersThree }]
@@ -42,6 +58,22 @@ export default function Layout({ user, onLogout }) {
           <div className="flex items-center justify-between p-6 border-b border-[#2A3730]">
             <h1 className="text-xl font-semibold text-[#E5E3DB]" data-testid="app-title">Gestao Rural</h1>
             <div className="flex items-center gap-1">
+              <button
+                onClick={() => setCmdOpen(true)}
+                className="p-1.5 rounded-lg text-[#E5E3DB] hover:bg-[#2A3730]"
+                data-testid="open-search-btn"
+                title="Buscar (Ctrl+K)"
+              >
+                <MagnifyingGlass size={18} />
+              </button>
+              <button
+                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                className="p-1.5 rounded-lg text-[#E5E3DB] hover:bg-[#2A3730]"
+                data-testid="theme-toggle-btn"
+                title={theme === 'dark' ? 'Modo claro' : 'Modo escuro'}
+              >
+                {theme === 'dark' ? <Sun size={18} weight="fill" /> : <Moon size={18} />}
+              </button>
               <div className="hidden lg:block">
                 <NotificationBell />
               </div>
@@ -115,6 +147,7 @@ export default function Layout({ user, onLogout }) {
           <Outlet />
         </main>
       </div>
+      <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
     </div>
   );
 }

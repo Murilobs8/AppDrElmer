@@ -9,6 +9,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import SelectEditavel from '../components/SelectEditavel';
+import { usePagination, PaginationBar } from '../components/Pagination';
 import { toast } from 'sonner';
 
 const TIPOS_ANIMAIS = ['Bovino', 'Suino', 'Ovino', 'Caprino', 'Equino', 'Aves', 'Outros'];
@@ -106,6 +107,7 @@ export default function Movimentacoes() {
   const animaisAtivos = animais.filter(a => a.status === 'ativo');
 
   const movFiltradas = movimentacoes.filter(m => tab === 'todas' ? true : m.tipo === tab);
+  const pag = usePagination(movFiltradas, 100);
 
   // ============== ENTRADA ==============
   const submitEntrada = async () => {
@@ -464,7 +466,7 @@ export default function Movimentacoes() {
             <tbody>
               {movFiltradas.length === 0 ? (
                 <tr><td colSpan={7} className="px-6 py-12 text-center text-[#7A8780]">Nenhuma movimentação registrada</td></tr>
-              ) : movFiltradas.map((mov) => {
+              ) : pag.paginated.map((mov) => {
                 const animal = animais.find(a => a.id === mov.animal_id);
                 return (
                   <tr key={mov.id} className="table-row border-b border-[#E5E3DB] hover:bg-[#FDFCFB]">
@@ -489,6 +491,7 @@ export default function Movimentacoes() {
             </tbody>
           </table>
         </div>
+        <PaginationBar {...pag} label="movimentações" />
       </div>
     </div>
   );

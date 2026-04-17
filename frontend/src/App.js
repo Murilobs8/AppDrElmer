@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { ThemeProvider } from 'next-themes';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Animais from './pages/Animais';
@@ -49,20 +50,20 @@ function App() {
   };
 
   if (checking) {
-    return <div className="min-h-screen bg-[#F4F3F0] flex items-center justify-center">Carregando...</div>;
+    return <div className="min-h-screen bg-[#F4F3F0] dark:bg-[#0F1612] flex items-center justify-center dark:text-[#E5E3DB]">Carregando...</div>;
   }
 
   if (!user) {
     return (
-      <>
+      <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
         <Login onLogin={handleLogin} />
         <Toaster position="bottom-right" />
-      </>
+      </ThemeProvider>
     );
   }
 
   return (
-    <>
+    <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Layout user={user} onLogout={handleLogout} />}>
@@ -82,7 +83,7 @@ function App() {
         </Routes>
       </BrowserRouter>
       <Toaster position="bottom-right" />
-    </>
+    </ThemeProvider>
   );
 }
 

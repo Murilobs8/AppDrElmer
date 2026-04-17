@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import api from '../lib/api';
 import { emit, on, EVENTS } from '../lib/eventBus';
+import { usePagination, PaginationBar } from '../components/Pagination';
 import { Plus, Trash, Pencil, Tag, ListPlus, X } from '@phosphor-icons/react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
@@ -196,6 +197,9 @@ export default function Despesas() {
     return cat ? cat.cor : '#999';
   };
 
+  const pagDesp = usePagination(despesas, 100);
+  const pagCat = usePagination(categorias, 100);
+
   if (loading) return <div className="flex justify-center items-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#4A6741]"></div></div>;
 
   return (
@@ -327,7 +331,7 @@ export default function Despesas() {
               <tbody>
                 {despesas.length === 0 ? (
                   <tr><td colSpan={5} className="text-center py-8 text-gray-500">Nenhuma despesa registrada</td></tr>
-                ) : despesas.map((d) => (
+                ) : pagDesp.paginated.map((d) => (
                   <tr key={d.id} className="border-t border-[#E8DCC8] hover:bg-[#FFFDF8]">
                     <td className="px-4 py-3">
                       <span className="flex items-center gap-2">
@@ -352,6 +356,7 @@ export default function Despesas() {
                 ))}
               </tbody>
             </table>
+            <PaginationBar {...pagDesp} label="despesas" />
           </div>
         </TabsContent>
 
@@ -440,7 +445,7 @@ export default function Despesas() {
               <tbody>
                 {categorias.length === 0 ? (
                   <tr><td colSpan={3} className="text-center py-8 text-gray-500">Nenhuma categoria</td></tr>
-                ) : categorias.map((c) => (
+                ) : pagCat.paginated.map((c) => (
                   <tr key={c.id} className="border-t border-[#E8DCC8] hover:bg-[#FFFDF8]">
                     <td className="px-4 py-3"><span className="w-5 h-5 rounded-full inline-block border border-gray-200" style={{ backgroundColor: c.cor }}></span></td>
                     <td className="px-4 py-3 font-medium">{c.nome}</td>
@@ -458,6 +463,7 @@ export default function Despesas() {
                 ))}
               </tbody>
             </table>
+            <PaginationBar {...pagCat} label="categorias" />
           </div>
         </TabsContent>
       </Tabs>

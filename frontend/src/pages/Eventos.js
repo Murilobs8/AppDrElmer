@@ -9,6 +9,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import SelectEditavel from '../components/SelectEditavel';
+import { usePagination, PaginationBar } from '../components/Pagination';
 import { toast } from 'sonner';
 
 const TIPOS_EVENTOS_PADRAO = ['nascimento', 'desmame', 'vacinacao', 'pesagem', 'tratamento', 'vermifugacao', 'exame'];
@@ -87,6 +88,7 @@ export default function Eventos() {
   }, [eventos, filtroTipo]);
 
   const tiposUnicos = [...new Set(eventos.map(e => e.tipo))].sort();
+  const pag = usePagination(grupos, 100);
 
   const toggleGrupo = (key) => {
     const n = new Set(expandido);
@@ -332,7 +334,7 @@ export default function Eventos() {
               <tbody>
                 {grupos.length === 0 ? (
                   <tr><td colSpan={6} className="text-center py-8 text-gray-500">Nenhum evento registrado</td></tr>
-                ) : grupos.map((g) => {
+                ) : pag.paginated.map((g) => {
                   const key = `${g.tipo}||${g.data}||${g.vacina || ''}`;
                   const aberto = expandido.has(key);
                   const qtd = g.eventos.length;
@@ -384,6 +386,7 @@ export default function Eventos() {
               </tbody>
             </table>
           </div>
+          <PaginationBar {...pag} label="grupos de eventos" />
         </>
       )}
 

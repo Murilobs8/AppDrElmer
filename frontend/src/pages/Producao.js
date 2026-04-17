@@ -8,6 +8,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import SelectEditavel from '../components/SelectEditavel';
+import { usePagination, PaginationBar } from '../components/Pagination';
 import { toast } from 'sonner';
 
 const MOTIVOS_PRODUCAO = ['leite', 'ovos', 'la', 'mel', 'aluguel_pasto', 'servico_reproducao', 'adubo', 'couro', 'outros'];
@@ -118,6 +119,7 @@ export default function Producao() {
   };
 
   const totalValor = producoes.reduce((s, p) => s + (p.valor || 0), 0);
+  const pag = usePagination(producoes, 100);
 
   if (loading) return <div className="flex justify-center items-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#4A6741]"></div></div>;
 
@@ -242,7 +244,7 @@ export default function Producao() {
                   <Drop size={40} className="mx-auto text-[#4A6741] mb-2" />
                   Nenhuma produção registrada ainda
                 </td></tr>
-              ) : producoes.map((p) => (
+              ) : pag.paginated.map((p) => (
                 <tr key={p.id} className="table-row border-b border-[#E5E3DB] hover:bg-[#FDFCFB]">
                   <td className="px-6 py-4 text-[#3A453F]">{new Date(p.data + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
                   <td className="px-6 py-4">
@@ -265,6 +267,7 @@ export default function Producao() {
             </tbody>
           </table>
         </div>
+        <PaginationBar {...pag} label="produções" />
       </div>
     </div>
   );
