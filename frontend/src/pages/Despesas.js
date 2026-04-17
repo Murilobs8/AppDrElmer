@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import api from '../lib/api';
+import { emit, on, EVENTS } from '../lib/eventBus';
 import { Plus, Trash, Pencil, Tag, ListPlus, X } from '@phosphor-icons/react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
@@ -34,6 +35,15 @@ export default function Despesas() {
 
   useEffect(() => { carregarDados(); }, []);
 
+  // Invalidação cruzada
+  useEffect(() => {
+    const unsubs = [
+      on(EVENTS.CATEGORIA_CHANGED, () => { carregarDados(); }),
+      on(EVENTS.DESPESA_CHANGED, () => { carregarDados(); }),
+    ];
+    return () => unsubs.forEach(u => u());
+  }, []);
+
   const carregarDados = async () => {
     try {
       const [despRes, catRes] = await Promise.all([
@@ -64,12 +74,18 @@ export default function Despesas() {
       setDialogOpen(false); setEditando(null);
       setFormData({ categoria_id: '', valor: '', data: '', descricao: '' });
       carregarDados();
+      emit(EVENTS.DESPESA_CHANGED);
     } catch (error) { toast.error(error.response?.data?.detail || 'Erro ao salvar despesa'); }
   };
 
   const handleDelete = async (id) => {
     if (!window.confirm('Excluir esta despesa?')) return;
-    try { await api.delete(`/despesas/${id}`); toast.success('Despesa excluida!'); carregarDados(); }
+    try {
+      await api.delete(`/despesas/${id}`);
+      toast.success('Despesa excluida!');
+      carregarDados();
+      emit(EVENTS.DESPESA_CHANGED);
+    }
     catch { toast.error('Erro ao excluir'); }
   };
 
@@ -91,6 +107,7 @@ export default function Despesas() {
       setBulkDespesaOpen(false);
       setBulkDespesa({ categoria_id: '', quantidade: '2', valor: '', data_inicio: '', descricao: '', recorrente: false });
       carregarDados();
+      emit(EVENTS.DESPESA_CHANGED);
     } catch (error) { toast.error(error.response?.data?.detail || 'Erro ao registrar despesas em massa'); }
     finally { setBulkDespesaLoading(false); }
   };
@@ -109,13 +126,33 @@ export default function Despesas() {
       setCatDialogOpen(false); setEditandoCat(null);
       setCatForm({ nome: '', cor: '#4A6741' });
       carregarDados();
+      emit(EVENTS.CATEGORIA_CHANGED);
     } catch (error) { toast.error('Erro ao salvar categoria'); }
   };
 
   const handleDeleteCat = async (id) => {
     if (!window.confirm('Excluir categoria?')) return;
-    try { await api.delete(`/categorias/${id}`); toast.success('Categoria excluida!'); carregarDados(); }
-    catch { toast.error('Erro ao excluir'); }
+    try {
+      await api.delete(`/categorias/${id}`);
+      toast.success('Categoria excluida!');
+      carregarDados();
+      emit(EVENTS.CATEGORIA_CHANGED);
+    }
+    catch (error) {
+      if (error.response?.status === 409) {
+        const detail = error.response.data?.detail || {};
+        const count = detail.despesas || 0;
+        if (window.confirm(`⚠️ Esta categoria tem ${count} despesa(s) vinculada(s).\n\nDeseja EXCLUIR A CATEGORIA E TODAS AS DESPESAS EM CASCATA?`)) {
+          try {
+            await api.delete(`/categorias/${id}?force=true`);
+            toast.success(`Categoria e ${count} despesa(s) excluídas em cascata!`);
+            carregarDados();
+            emit(EVENTS.CATEGORIA_CHANGED);
+            emit(EVENTS.DESPESA_CHANGED);
+          } catch { toast.error('Erro ao excluir em cascata'); }
+        }
+      } else { toast.error('Erro ao excluir'); }
+    }
   };
 
   // ============= BULK CATEGORIA =============
@@ -145,6 +182,7 @@ export default function Despesas() {
       setBulkCatOpen(false);
       setBulkCats([{ nome: '', cor: '#4A6741' }, { nome: '', cor: '#C25934' }]);
       carregarDados();
+      emit(EVENTS.CATEGORIA_CHANGED);
     } catch (error) { toast.error('Erro ao criar categorias em massa'); }
     finally { setBulkCatLoading(false); }
   };

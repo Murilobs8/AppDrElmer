@@ -476,11 +476,27 @@ async def listar_categorias():
     return [serialize_doc(doc) for doc in docs]
 
 @api_router.delete("/categorias/{categoria_id}")
-async def deletar_categoria(categoria_id: str):
-    result = await db.categorias.delete_one({"id": categoria_id})
-    if result.deleted_count == 0:
+async def deletar_categoria(categoria_id: str, force: bool = False):
+    cat = await db.categorias.find_one({"id": categoria_id}, {"_id": 0})
+    if not cat:
         raise HTTPException(status_code=404, detail="Categoria nao encontrada")
-    return {"message": "Categoria deletada"}
+    desp_count = await db.despesas.count_documents({"categoria_id": categoria_id})
+    if desp_count > 0 and not force:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": f"Categoria tem {desp_count} despesa(s) vinculada(s). Use force=true para excluir em cascata.",
+                "despesas": desp_count,
+            },
+        )
+    if force and desp_count > 0:
+        await db.despesas.delete_many({"categoria_id": categoria_id})
+    await db.categorias.delete_one({"id": categoria_id})
+    return {
+        "message": "Categoria deletada",
+        "cascata": force and desp_count > 0,
+        "despesas_removidas": desp_count if force else 0,
+    }
 
 @api_router.put("/categorias/{categoria_id}", response_model=Categoria)
 async def atualizar_categoria(categoria_id: str, input: CategoriaCreate):
@@ -621,12 +637,61 @@ async def atualizar_animal(animal_id: str, input: AnimalCreate):
     doc = await db.animais.find_one({"id": animal_id}, {"_id": 0})
     return serialize_doc(doc)
 
-@api_router.delete("/animais/{animal_id}")
-async def deletar_animal(animal_id: str):
-    result = await db.animais.delete_one({"id": animal_id})
-    if result.deleted_count == 0:
+@api_router.get("/animais/{animal_id}/filhos")
+async def listar_filhos_animal(animal_id: str):
+    """Lista todos os animais cuja genitora é o animal_id informado (descendência direta)."""
+    pai_existe = await db.animais.find_one({"id": animal_id}, {"_id": 0, "id": 1})
+    if not pai_existe:
         raise HTTPException(status_code=404, detail="Animal nao encontrado")
-    return {"message": "Animal deletado"}
+    docs = await db.animais.find({"genitora_id": animal_id}, {"_id": 0}).to_list(5000)
+    return [serialize_doc(d) for d in docs]
+
+
+@api_router.delete("/animais/{animal_id}")
+async def deletar_animal(animal_id: str, force: bool = False):
+    animal = await db.animais.find_one({"id": animal_id}, {"_id": 0})
+    if not animal:
+        raise HTTPException(status_code=404, detail="Animal nao encontrado")
+
+    # Verificar dependências
+    mov_count = await db.movimentacoes.count_documents({"animal_id": animal_id})
+    evt_count = await db.eventos.count_documents({"animal_id": animal_id})
+    filhos_count = await db.animais.count_documents({"genitora_id": animal_id})
+
+    total_deps = mov_count + evt_count + filhos_count
+
+    if total_deps > 0 and not force:
+        partes = []
+        if mov_count: partes.append(f"{mov_count} movimentacao(oes)")
+        if evt_count: partes.append(f"{evt_count} evento(s)")
+        if filhos_count: partes.append(f"{filhos_count} filho(s)/descendente(s)")
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": f"Animal tem dependencias: {', '.join(partes)}. Use force=true para excluir em cascata.",
+                "movimentacoes": mov_count,
+                "eventos": evt_count,
+                "filhos": filhos_count,
+            },
+        )
+
+    if force and total_deps > 0:
+        # Cascata: apagar movimentações, eventos e desvincular filhos (preserva filhos sem genitora)
+        if mov_count:
+            await db.movimentacoes.delete_many({"animal_id": animal_id})
+        if evt_count:
+            await db.eventos.delete_many({"animal_id": animal_id})
+        if filhos_count:
+            await db.animais.update_many({"genitora_id": animal_id}, {"$set": {"genitora_id": None}})
+
+    await db.animais.delete_one({"id": animal_id})
+    return {
+        "message": "Animal deletado",
+        "cascata": force and total_deps > 0,
+        "movimentacoes_removidas": mov_count if force else 0,
+        "eventos_removidos": evt_count if force else 0,
+        "filhos_desvinculados": filhos_count if force else 0,
+    }
 
 
 # ============= MOVIMENTACOES =============
@@ -924,6 +989,40 @@ async def salvar_calendario(tipo_animal: str, input: CalendarioVacinacaoUpdate):
     )
     return {"message": f"Calendario de {tipo_animal} salvo", "total_protocolos": len(protocolos)}
 
+@api_router.post("/calendario-vacinacao/{tipo_animal}/sincronizar-lembretes")
+async def sincronizar_lembretes_calendario(tipo_animal: str, desativar: bool = True):
+    """
+    Sincroniza lembretes auto-gerados com o calendário atual do tipo de animal.
+    Identifica lembretes [Auto] que não correspondem mais a nenhum protocolo ativo.
+    Se desativar=True, desativa. Se desativar=False, apenas lista os órfãos (dry-run).
+    """
+    doc = await db.calendario_vacinacao.find_one({"tipo_animal": tipo_animal}, {"_id": 0})
+    protocolos_atuais = doc["protocolos"] if doc else CALENDARIO_PADRAO.get(tipo_animal, [])
+    nomes_atuais = {f"[Auto] {p['nome']} - {tipo_animal}" for p in protocolos_atuais}
+
+    # Buscar todos os lembretes [Auto] deste tipo
+    import re as _re
+    regex = f"^\\[Auto\\].*- {_re.escape(tipo_animal)}$"
+    auto_lembretes = await db.lembretes.find(
+        {"nome": {"$regex": regex}}, {"_id": 0}
+    ).to_list(1000)
+
+    orfaos = [lem for lem in auto_lembretes if lem.get("nome") not in nomes_atuais]
+
+    if desativar and orfaos:
+        orfao_ids = [lem["id"] for lem in orfaos]
+        await db.lembretes.update_many(
+            {"id": {"$in": orfao_ids}}, {"$set": {"ativo": False}}
+        )
+
+    return {
+        "tipo_animal": tipo_animal,
+        "total_auto_lembretes": len(auto_lembretes),
+        "total_orfaos": len(orfaos),
+        "orfaos": [{"id": lem["id"], "nome": lem["nome"]} for lem in orfaos],
+        "desativados": len(orfaos) if desativar else 0,
+    }
+
 @api_router.delete("/calendario-vacinacao/{tipo_animal}")
 async def resetar_calendario(tipo_animal: str):
     await db.calendario_vacinacao.delete_one({"tipo_animal": tipo_animal})
@@ -1098,13 +1197,27 @@ async def obter_historico_animal(animal_id: str):
         d = str(e.get("data", ""))
         if not tipos_evento[t]["ultimo"] or d > tipos_evento[t]["ultimo"]:
             tipos_evento[t]["ultimo"] = d
-    
+
+    # Filhos / descendência direta
+    filhos_docs = await db.animais.find({"genitora_id": animal_id}, {"_id": 0}).to_list(5000)
+    filhos = [serialize_doc(f) for f in filhos_docs]
+
+    # Genitora (mãe) se existir
+    genitora = None
+    if animal.get("genitora_id"):
+        g_doc = await db.animais.find_one({"id": animal["genitora_id"]}, {"_id": 0})
+        if g_doc:
+            genitora = serialize_doc(g_doc)
+
     return {
         "animal": serialize_doc(animal),
         "historico": historico,
         "resumo_eventos": tipos_evento,
         "total_eventos": len(eventos),
-        "total_movimentacoes": len(movimentacoes)
+        "total_movimentacoes": len(movimentacoes),
+        "filhos": filhos,
+        "total_filhos": len(filhos),
+        "genitora": genitora,
     }
 
 

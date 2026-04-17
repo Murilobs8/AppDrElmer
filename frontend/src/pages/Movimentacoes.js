@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
+import { emit, on, EVENTS } from '../lib/eventBus';
 import { Plus, Trash, Pencil, CopySimple } from '@phosphor-icons/react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
 import { Button } from '../components/ui/button';
@@ -33,6 +35,7 @@ const UNIDADES = [
 const TIPOS_ANIMAIS = ['Bovino', 'Suino', 'Ovino', 'Caprino', 'Equino', 'Aves', 'Outros'];
 
 export default function Movimentacoes() {
+  const navigate = useNavigate();
   const [movimentacoes, setMovimentacoes] = useState([]);
   const [animais, setAnimais] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -49,6 +52,20 @@ export default function Movimentacoes() {
   });
 
   useEffect(() => { carregarDados(); }, []);
+
+  // Invalidação cruzada
+  useEffect(() => {
+    const unsubs = [
+      on(EVENTS.ANIMAL_CHANGED, () => { carregarDados(); }),
+      on(EVENTS.MOVIMENTACAO_CHANGED, () => { carregarDados(); }),
+    ];
+    return () => unsubs.forEach(u => u());
+  }, []);
+
+  const abrirHistorico = (animalId) => {
+    if (!animalId) return;
+    navigate(`/animais?open=${animalId}`);
+  };
 
   const carregarDados = async () => {
     try {
@@ -80,6 +97,8 @@ export default function Movimentacoes() {
         toast.success('Movimentacao registrada!');
       }
       setDialogOpen(false); resetForm(); carregarDados();
+      emit(EVENTS.MOVIMENTACAO_CHANGED);
+      emit(EVENTS.ANIMAL_CHANGED); // status do animal pode ter mudado
     } catch (error) { toast.error('Erro ao salvar movimentacao'); }
   };
 
@@ -99,6 +118,8 @@ export default function Movimentacoes() {
       const response = await api.post(`/movimentacoes/bulk`, payload);
       toast.success(`${response.data.total} movimentacoes registradas!`);
       setDialogBulkOpen(false); resetBulkForm(); carregarDados();
+      emit(EVENTS.MOVIMENTACAO_CHANGED);
+      emit(EVENTS.ANIMAL_CHANGED);
     } catch (error) {
       const d = error.response?.data?.detail;
       toast.error(typeof d === 'string' ? d : 'Erro na movimentacao em massa');
@@ -107,7 +128,12 @@ export default function Movimentacoes() {
 
   const handleDelete = async (id) => {
     if (!window.confirm('Excluir esta movimentacao?')) return;
-    try { await api.delete(`/movimentacoes/${id}`); toast.success('Excluida!'); carregarDados(); }
+    try {
+      await api.delete(`/movimentacoes/${id}`);
+      toast.success('Excluida!');
+      carregarDados();
+      emit(EVENTS.MOVIMENTACAO_CHANGED);
+    }
     catch (error) { toast.error('Erro ao excluir'); }
   };
 
@@ -297,7 +323,18 @@ export default function Movimentacoes() {
                     <td className="px-6 py-4 text-[#3A453F]">{new Date(mov.data).toLocaleDateString('pt-BR')}</td>
                     <td className="px-6 py-4"><span className={`px-2 py-1 rounded-md text-xs font-medium ${getTipoBadge(mov.tipo)}`}>{getTipoLabel(mov.tipo)}</span></td>
                     <td className="px-6 py-4 text-[#3A453F]">{MOTIVO_LABELS[mov.motivo] || mov.motivo}</td>
-                    <td className="px-6 py-4 text-[#3A453F]">{detalhe}</td>
+                    <td className="px-6 py-4 text-[#3A453F]">
+                      {animal ? (
+                        <button
+                          onClick={() => abrirHistorico(animal.id)}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#E8F0E6] text-[#4A6741] hover:bg-[#4A6741] hover:text-white transition-colors font-medium text-xs"
+                          data-testid={`link-animal-${animal.tag}`}
+                          title="Abrir histórico do animal"
+                        >
+                          {animal.tag} <span className="opacity-60">({animal.tipo})</span>
+                        </button>
+                      ) : detalhe}
+                    </td>
                     <td className="px-6 py-4 text-[#3A453F]">{qtdLabel}</td>
                     <td className="px-6 py-4 text-[#3A453F]">{mov.valor ? `R$ ${mov.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '-'}</td>
                     <td className="px-6 py-4">

@@ -149,7 +149,23 @@ export default function Lembretes() {
     if (!calendarioSelecionado) return;
     try {
       await api.put(`/calendario-vacinacao/${calendarioSelecionado}`, { protocolos });
-      toast.success('Calendario salvo!');
+      // Verificar se há lembretes auto-gerados órfãos (dry-run)
+      try {
+        const check = await api.post(`/calendario-vacinacao/${calendarioSelecionado}/sincronizar-lembretes?desativar=false`);
+        if (check.data?.total_orfaos > 0) {
+          const nomes = (check.data.orfaos || []).map(o => o.nome.replace('[Auto] ', '').replace(` - ${calendarioSelecionado}`, '')).slice(0, 5).join(', ');
+          const extra = check.data.orfaos.length > 5 ? '...' : '';
+          if (window.confirm(`✅ Calendário salvo!\n\n⚠️ ${check.data.total_orfaos} lembrete(s) auto-gerado(s) ficaram órfãos (protocolos removidos): ${nomes}${extra}\n\nDeseja DESATIVAR esses lembretes órfãos?`)) {
+            const res = await api.post(`/calendario-vacinacao/${calendarioSelecionado}/sincronizar-lembretes?desativar=true`);
+            toast.success(`Calendário salvo e ${res.data.desativados} lembrete(s) órfão(s) desativado(s)!`);
+            carregarDados();
+          } else {
+            toast.success('Calendário salvo (lembretes órfãos mantidos ativos)');
+          }
+        } else {
+          toast.success('Calendario salvo!');
+        }
+      } catch { toast.success('Calendario salvo!'); }
       setCalPersonalizado(true);
       carregarTiposPadrao();
     } catch { toast.error('Erro ao salvar'); }

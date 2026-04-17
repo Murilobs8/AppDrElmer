@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import api from '../lib/api';
+import { emit, on, EVENTS } from '../lib/eventBus';
 import { Plus, Trash, Pencil, CopySimple, Funnel, CheckSquare, Square, Syringe, ClockCounterClockwise, X } from '@phosphor-icons/react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
 import { Button } from '../components/ui/button';
@@ -78,6 +79,34 @@ export default function Animais() {
   const [todosEventos, setTodosEventos] = useState([]);
 
   useEffect(() => { carregarAnimais(); carregarSequencias(); carregarEventos(); }, []);
+
+  // Invalidação cruzada: quando outras páginas mudam dados relacionados, recarrega
+  useEffect(() => {
+    const unsubs = [
+      on(EVENTS.ANIMAL_CHANGED, () => { carregarAnimais(); carregarSequencias(); }),
+      on(EVENTS.EVENTO_CHANGED, () => { carregarEventos(); carregarAnimais(); }),
+      on(EVENTS.MOVIMENTACAO_CHANGED, () => { carregarAnimais(); }),
+    ];
+    return () => unsubs.forEach(u => u());
+  }, []);
+
+  // Abrir histórico automaticamente via query ?open=<animal_id> (navegação cruzada)
+  useEffect(() => {
+    if (!animais.length) return;
+    const params = new URLSearchParams(window.location.search);
+    const openId = params.get('open');
+    if (openId && expandidoId !== openId) {
+      const animal = animais.find(a => a.id === openId);
+      if (animal) {
+        toggleHistorico(animal);
+        // Limpa o query param para não reabrir ao recarregar
+        const url = new URL(window.location.href);
+        url.searchParams.delete('open');
+        window.history.replaceState({}, '', url.toString());
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [animais]);
 
   const carregarAnimais = async () => {
     try {
@@ -184,6 +213,7 @@ export default function Animais() {
       if (editando) { await api.put(`/animais/${editando.id}`, payload); toast.success('Animal atualizado!'); }
       else { await api.post(`/animais`, payload); toast.success('Animal cadastrado!'); }
       setDialogOpen(false); resetForm(); carregarAnimais(); carregarSequencias();
+      emit(EVENTS.ANIMAL_CHANGED);
     } catch (error) { const d = error.response?.data?.detail; toast.error(typeof d === 'string' ? d : 'Erro ao salvar animal'); }
   };
 
@@ -195,6 +225,7 @@ export default function Animais() {
       const response = await api.post(`/animais/bulk`, payload);
       toast.success(`${response.data.length} animais cadastrados!`);
       setDialogBulkOpen(false); resetBulkForm(); carregarAnimais(); carregarSequencias();
+      emit(EVENTS.ANIMAL_CHANGED);
     } catch (error) { const d = error.response?.data?.detail; toast.error(typeof d === 'string' ? d : 'Erro no cadastro em massa'); }
   };
 
@@ -215,24 +246,81 @@ export default function Animais() {
       } catch (error) { /* continua */ }
     }
     toast.success(`Evento registrado para ${sucesso} de ${selecionados.size} animais!`);
-    setDialogEventoOpen(false); resetEventoForm(); setSelecionados(new Set()); carregarAnimais();
+    setDialogEventoOpen(false); resetEventoForm(); setSelecionados(new Set()); carregarAnimais(); carregarEventos();
+    emit(EVENTS.EVENTO_CHANGED);
+    emit(EVENTS.ANIMAL_CHANGED);
+  };
+
+  const confirmarDelecaoForcada = (deps, label) => {
+    const partes = [];
+    if (deps.movimentacoes) partes.push(`${deps.movimentacoes} movimentação(ões)`);
+    if (deps.eventos) partes.push(`${deps.eventos} evento(s)`);
+    if (deps.filhos) partes.push(`${deps.filhos} filho(s) (ficarão sem genitora)`);
+    return window.confirm(
+      `⚠️ ${label}\n\nDependências encontradas:\n• ${partes.join('\n• ')}\n\nDeseja EXCLUIR EM CASCATA? Movimentações e eventos serão APAGADOS. Filhos terão a genitora removida.`
+    );
+  };
+
+  const deletarAnimal = async (id, { silent = false } = {}) => {
+    try {
+      await api.delete(`/animais/${id}`);
+      return { ok: true, cascata: false };
+    } catch (error) {
+      if (error.response?.status === 409) {
+        const detail = error.response.data?.detail || {};
+        if (silent) return { ok: false, deps: detail };
+        const ok = confirmarDelecaoForcada(detail, 'Este animal tem dependências.');
+        if (!ok) return { ok: false, cancelado: true };
+        await api.delete(`/animais/${id}?force=true`);
+        return { ok: true, cascata: true };
+      }
+      throw error;
+    }
   };
 
   const handleDeleteEmMassa = async () => {
     if (selecionados.size === 0) { toast.error('Selecione pelo menos um animal'); return; }
     if (!window.confirm(`Excluir ${selecionados.size} animais selecionados?`)) return;
-    let sucesso = 0;
+    let sucesso = 0, bloqueados = 0, cascata = 0;
+    const bloqueadosList = [];
     for (const id of selecionados) {
-      try { await api.delete(`/animais/${id}`); sucesso++; } catch (error) { /* continua */ }
+      try {
+        const r = await deletarAnimal(id, { silent: true });
+        if (r.ok) { sucesso++; if (r.cascata) cascata++; }
+        else { bloqueados++; const a = animais.find(x => x.id === id); bloqueadosList.push(a?.tag || id); }
+      } catch (error) { /* continua */ }
     }
-    toast.success(`${sucesso} animais excluidos!`);
-    setSelecionados(new Set()); carregarAnimais();
+    if (sucesso) toast.success(`${sucesso} animal(is) excluído(s)${cascata ? ` (${cascata} em cascata)` : ''}`);
+    if (bloqueados) {
+      if (window.confirm(`⚠️ ${bloqueados} animal(is) têm dependências (${bloqueadosList.slice(0,5).join(', ')}${bloqueadosList.length>5?'...':''}).\n\nExcluir TODOS EM CASCATA? (movimentações/eventos serão apagados, filhos desvinculados)`)) {
+        let forced = 0;
+        for (const id of selecionados) {
+          const a = animais.find(x => x.id === id);
+          if (!a || !bloqueadosList.includes(a.tag)) continue;
+          try { await api.delete(`/animais/${id}?force=true`); forced++; } catch { /* continua */ }
+        }
+        if (forced) toast.success(`${forced} animal(is) excluído(s) em cascata`);
+      }
+    }
+    setSelecionados(new Set()); carregarAnimais(); carregarEventos();
+    emit(EVENTS.ANIMAL_CHANGED);
+    emit(EVENTS.EVENTO_CHANGED);
+    emit(EVENTS.MOVIMENTACAO_CHANGED);
   };
 
   const handleDelete = async (id) => {
     if (!window.confirm('Excluir este animal?')) return;
-    try { await api.delete(`/animais/${id}`); toast.success('Animal excluido!'); carregarAnimais(); }
-    catch (error) { toast.error('Erro ao excluir'); }
+    try {
+      const r = await deletarAnimal(id);
+      if (r.cancelado) return;
+      if (r.ok) {
+        toast.success(r.cascata ? 'Animal excluído em cascata!' : 'Animal excluído!');
+        carregarAnimais(); carregarEventos();
+        emit(EVENTS.ANIMAL_CHANGED);
+        emit(EVENTS.EVENTO_CHANGED);
+        emit(EVENTS.MOVIMENTACAO_CHANGED);
+      }
+    } catch (error) { toast.error('Erro ao excluir'); }
   };
 
   const resetForm = () => { setFormData({ tipo: '', tag: '', sexo: '', genitora_id: '', data_nascimento: '', peso_atual: '', peso_tipo: 'aferido', observacoes: '' }); setEditando(null); };
@@ -615,6 +703,44 @@ export default function Animais() {
                                     {info.ultimo && <p className="text-[10px] text-[#4A6741]">{new Date(info.ultimo + 'T00:00:00').toLocaleDateString('pt-BR')}</p>}
                                   </div>
                                 ))}
+                              </div>
+                            )}
+
+                            {/* Genealogia: genitora + filhos */}
+                            {(historicoData.genitora || (historicoData.filhos && historicoData.filhos.length > 0)) && (
+                              <div className="bg-white rounded-lg border border-[#E5E3DB] p-3" data-testid="genealogia-box">
+                                <p className="text-xs font-bold text-[#4A6741] uppercase tracking-wider mb-2">Genealogia</p>
+                                {historicoData.genitora && (
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <span className="text-[10px] text-[#7A8780] uppercase tracking-wider">Mãe:</span>
+                                    <button
+                                      onClick={() => { setExpandidoId(null); setTimeout(() => toggleHistorico(historicoData.genitora), 50); }}
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#FFF3E0] text-[#B45309] rounded font-mono text-xs font-medium hover:underline"
+                                      data-testid="link-genitora"
+                                      title="Abrir histórico da mãe"
+                                    >
+                                      {historicoData.genitora.tag} · {historicoData.genitora.tipo}
+                                    </button>
+                                  </div>
+                                )}
+                                {historicoData.filhos && historicoData.filhos.length > 0 && (
+                                  <div>
+                                    <span className="text-[10px] text-[#7A8780] uppercase tracking-wider">Filhos ({historicoData.total_filhos}):</span>
+                                    <div className="flex flex-wrap gap-1.5 mt-1">
+                                      {historicoData.filhos.map(f => (
+                                        <button
+                                          key={f.id}
+                                          onClick={() => { setExpandidoId(null); setTimeout(() => toggleHistorico(f), 50); }}
+                                          className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#E8F0E6] text-[#4A6741] rounded font-mono text-xs hover:bg-[#4A6741] hover:text-white transition-colors"
+                                          data-testid={`link-filho-${f.tag}`}
+                                          title={`${f.sexo === 'femea' ? 'Fêmea' : f.sexo === 'macho' ? 'Macho' : 'Sem sexo'} · ${f.status}`}
+                                        >
+                                          {f.tag}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             )}
 

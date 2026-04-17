@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
+import { emit, on, EVENTS } from '../lib/eventBus';
 import { Plus, Trash, Pencil, ListPlus } from '@phosphor-icons/react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
 import { Button } from '../components/ui/button';
@@ -12,6 +14,7 @@ import { toast } from 'sonner';
 const TIPOS_EVENTOS_PADRAO = ['nascimento', 'desmame', 'vacinacao', 'pesagem', 'tratamento'];
 
 export default function Eventos() {
+  const navigate = useNavigate();
   const [eventos, setEventos] = useState([]);
   const [animais, setAnimais] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -27,6 +30,20 @@ export default function Eventos() {
   const tiposUnicos = [...new Set(eventos.map(e => e.tipo))].sort();
 
   useEffect(() => { carregarDados(); carregarSequencias(); }, []);
+
+  // Invalidação cruzada
+  useEffect(() => {
+    const unsubs = [
+      on(EVENTS.ANIMAL_CHANGED, () => { carregarDados(); carregarSequencias(); }),
+      on(EVENTS.EVENTO_CHANGED, () => { carregarDados(); }),
+    ];
+    return () => unsubs.forEach(u => u());
+  }, []);
+
+  const abrirHistorico = (animalId) => {
+    if (!animalId) return;
+    navigate(`/animais?open=${animalId}`);
+  };
 
   const eventosFiltrados = filtroTipo ? eventos.filter(e => e.tipo === filtroTipo) : eventos;
 
@@ -67,6 +84,8 @@ export default function Eventos() {
       setEditando(null);
       setFormData({ tipo: '', animal_id: '', data: '', detalhes: '', peso: '', peso_tipo: 'aferido', vacina: '' });
       carregarDados();
+      emit(EVENTS.EVENTO_CHANGED);
+      emit(EVENTS.ANIMAL_CHANGED); // pesagem atualiza peso_atual do animal
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Erro ao salvar evento');
     }
@@ -90,6 +109,8 @@ export default function Eventos() {
       setBulkDialogOpen(false);
       setBulkData({ tipo: '', tag_prefixo: '', tag_inicio: '', tag_fim: '', data: '', detalhes: '', peso: '', peso_tipo: 'estimado', vacina: '' });
       carregarDados();
+      emit(EVENTS.EVENTO_CHANGED);
+      emit(EVENTS.ANIMAL_CHANGED);
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Erro ao registrar eventos em massa');
     } finally { setBulkLoading(false); }
@@ -97,7 +118,12 @@ export default function Eventos() {
 
   const handleDelete = async (id) => {
     if (!window.confirm('Deseja excluir este evento?')) return;
-    try { await api.delete(`/eventos/${id}`); toast.success('Evento excluido!'); carregarDados(); }
+    try {
+      await api.delete(`/eventos/${id}`);
+      toast.success('Evento excluido!');
+      carregarDados();
+      emit(EVENTS.EVENTO_CHANGED);
+    }
     catch { toast.error('Erro ao excluir'); }
   };
 
@@ -291,10 +317,23 @@ export default function Eventos() {
           <tbody>
             {eventosFiltrados.length === 0 ? (
               <tr><td colSpan={7} className="text-center py-8 text-gray-500">{eventos.length === 0 ? 'Nenhum evento registrado' : 'Nenhum evento encontrado com este filtro'}</td></tr>
-            ) : eventosFiltrados.map((evento) => (
+            ) : eventosFiltrados.map((evento) => {
+              const animal = animais.find(a => a.id === evento.animal_id);
+              return (
               <tr key={evento.id} className="border-t border-[#E8DCC8] hover:bg-[#FFFDF8]">
                 <td className="px-4 py-3 capitalize">{evento.tipo}</td>
-                <td className="px-4 py-3">{getAnimalTag(evento.animal_id)}</td>
+                <td className="px-4 py-3">
+                  {animal ? (
+                    <button
+                      onClick={() => abrirHistorico(animal.id)}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#E8F0E6] text-[#4A6741] hover:bg-[#4A6741] hover:text-white transition-colors font-medium text-xs"
+                      data-testid={`link-animal-${animal.tag}`}
+                      title="Abrir histórico do animal"
+                    >
+                      {animal.tag}
+                    </button>
+                  ) : getAnimalTag(evento.animal_id)}
+                </td>
                 <td className="px-4 py-3">{new Date(evento.data + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
                 <td className="px-4 py-3 max-w-[200px] truncate">{evento.detalhes || '-'}</td>
                 <td className="px-4 py-3">{evento.peso ? `${evento.peso} kg` : '-'}</td>
@@ -310,7 +349,8 @@ export default function Eventos() {
                   </div>
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
