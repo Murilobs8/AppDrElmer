@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { emit, on, EVENTS } from '../lib/eventBus';
-import { Plus, Trash, Pencil, Bell, BellRinging, ToggleLeft, ToggleRight, Warning, CaretDown, CaretRight } from '@phosphor-icons/react';
+import { Plus, Trash, Pencil, Bell, BellRinging, ToggleLeft, ToggleRight, Warning, CaretDown, CaretRight, Check, Lightning } from '@phosphor-icons/react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -24,6 +24,11 @@ export default function Lembretes() {
   const [tab, setTab] = useState('alertas');
   const [filtroTipoAlerta, setFiltroTipoAlerta] = useState('');
   const [expandidos, setExpandidos] = useState(new Set());
+
+  // Dialog de registro em lote
+  const [bulkDialog, setBulkDialog] = useState(null); // { lembrete_nome, tipo_acao, itens }
+  const [bulkForm, setBulkForm] = useState({ data: new Date().toISOString().split('T')[0], detalhes: '', peso: '', peso_tipo: 'aferido', vacina: '' });
+  const [bulkLoading, setBulkLoading] = useState(false);
 
   const [form, setForm] = useState({
     nome: '', tipo_acao: '', mensagem: '', recorrencia_dias: '', ativo: true,
@@ -172,6 +177,44 @@ export default function Lembretes() {
   const pagAlertas = usePagination(gruposAlertas, 100);
   const abrirHistorico = (id) => navigate(`/animais?open=${id}`);
 
+  // ============ AÇÃO EM LOTE: registrar evento para todos do grupo ============
+  const abrirBulkDialog = (grupoLemb) => {
+    setBulkDialog(grupoLemb);
+    setBulkForm({
+      data: new Date().toISOString().split('T')[0],
+      detalhes: grupoLemb.mensagem || '',
+      peso: '',
+      peso_tipo: 'aferido',
+      vacina: grupoLemb.tipo_acao === 'vacinacao' ? grupoLemb.lembrete_nome : '',
+    });
+  };
+
+  const executarBulk = async () => {
+    if (!bulkDialog) return;
+    if (!bulkForm.data) { toast.error('Informe a data'); return; }
+    setBulkLoading(true);
+    try {
+      const payload = {
+        tipo: bulkDialog.tipo_acao,
+        animal_ids: bulkDialog.itens.map(a => a.animal_id),
+        data: bulkForm.data,
+        detalhes: bulkForm.detalhes || '',
+        peso: bulkForm.peso ? parseFloat(bulkForm.peso) : null,
+        peso_tipo: bulkForm.peso_tipo || 'aferido',
+        vacina: bulkForm.vacina || null,
+      };
+      const res = await api.post('/eventos/bulk-from-ids', payload);
+      toast.success(`${res.data.total} evento(s) registrado(s) para "${bulkDialog.lembrete_nome}"!`);
+      setBulkDialog(null);
+      carregarDados();
+      emit(EVENTS.EVENTO_CHANGED);
+      emit(EVENTS.ANIMAL_CHANGED);
+      emit(EVENTS.LEMBRETE_CHANGED);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Erro ao registrar em lote');
+    } finally { setBulkLoading(false); }
+  };
+
   const formatCondicoes = (c) => {
     if (!c) return '-';
     const parts = [];
@@ -263,26 +306,39 @@ export default function Lembretes() {
                             const lembAberto = expandidos.has(keyLemb);
                             return (
                               <div key={keyLemb} className="border-b border-[#E8DCC8] last:border-0">
-                                <button
-                                  onClick={() => toggleGrupo(keyLemb)}
-                                  className={`w-full text-left pl-12 pr-4 py-2.5 transition-colors flex items-center gap-3 ${g.urgentes > 0 ? 'hover:bg-red-50/60' : 'hover:bg-amber-50/60'}`}
-                                  data-testid={`grupo-lembrete-${keyLemb}`}
+                                <div
+                                  className={`flex items-center gap-1 pr-3 transition-colors ${g.urgentes > 0 ? 'hover:bg-red-50/60' : 'hover:bg-amber-50/60'}`}
                                 >
-                                  <span className="text-[#7A8780]">{lembAberto ? <CaretDown size={14} /> : <CaretRight size={14} />}</span>
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-[#2F1810]">{g.lembrete_nome}</p>
-                                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                                      <span className="text-xs bg-[#4A6741]/10 text-[#4A6741] px-1.5 py-0.5 rounded-full font-medium">{g.itens.length} animal(is)</span>
-                                      {g.urgentes > 0 && (
-                                        <span className="text-xs bg-red-200 text-red-700 px-1.5 py-0.5 rounded-full font-medium">{g.urgentes} nunca feito</span>
-                                      )}
-                                      {g.itens.length - g.urgentes > 0 && (
-                                        <span className="text-xs bg-amber-200 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">{g.itens.length - g.urgentes} vencido(s)</span>
-                                      )}
-                                      {g.mensagem && <span className="text-xs text-[#7A8780] truncate">· {g.mensagem}</span>}
+                                  <button
+                                    onClick={() => toggleGrupo(keyLemb)}
+                                    className="flex-1 text-left pl-12 pr-2 py-2.5 flex items-center gap-3"
+                                    data-testid={`grupo-lembrete-${keyLemb}`}
+                                  >
+                                    <span className="text-[#7A8780]">{lembAberto ? <CaretDown size={14} /> : <CaretRight size={14} />}</span>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium text-[#2F1810]">{g.lembrete_nome}</p>
+                                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                        <span className="text-xs bg-[#4A6741]/10 text-[#4A6741] px-1.5 py-0.5 rounded-full font-medium">{g.itens.length} animal(is)</span>
+                                        {g.urgentes > 0 && (
+                                          <span className="text-xs bg-red-200 text-red-700 px-1.5 py-0.5 rounded-full font-medium">{g.urgentes} nunca feito</span>
+                                        )}
+                                        {g.itens.length - g.urgentes > 0 && (
+                                          <span className="text-xs bg-amber-200 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">{g.itens.length - g.urgentes} vencido(s)</span>
+                                        )}
+                                        {g.mensagem && <span className="text-xs text-[#7A8780] truncate">· {g.mensagem}</span>}
+                                      </div>
                                     </div>
-                                  </div>
-                                </button>
+                                  </button>
+                                  <Button
+                                    size="sm"
+                                    onClick={(e) => { e.stopPropagation(); abrirBulkDialog(g); }}
+                                    className="bg-[#4A6741] hover:bg-[#3B5233] text-white text-xs px-2 py-1 h-8 flex-shrink-0"
+                                    data-testid={`bulk-lembrete-${keyLemb}`}
+                                    title={`Registrar ${g.tipo_acao} para todos os ${g.itens.length} animais`}
+                                  >
+                                    <Lightning size={14} weight="fill" className="mr-1" /> Registrar para todos
+                                  </Button>
+                                </div>
 
                                 {/* NÍVEL 3: animais individuais */}
                                 {lembAberto && (
@@ -428,6 +484,91 @@ export default function Lembretes() {
           </div>
         </div>
       )}
+
+      {/* Dialog de registro em lote (ação rápida no nível 2 dos alertas) */}
+      <Dialog open={!!bulkDialog} onOpenChange={(v) => { if (!v) setBulkDialog(null); }}>
+        <DialogContent className="max-w-md" data-testid="bulk-evento-dialog">
+          {bulkDialog && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Lightning size={20} className="text-[#4A6741]" weight="fill" />
+                  Registrar para todos
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="bg-[#F5F0E8] rounded-lg p-3">
+                  <p className="text-xs text-[#7A8780] uppercase tracking-wider mb-1">Ação em lote</p>
+                  <p className="text-sm font-semibold text-[#2F1810]">{bulkDialog.lembrete_nome}</p>
+                  <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                    <span className="text-xs bg-[#4A6741]/10 text-[#4A6741] px-2 py-0.5 rounded-full font-medium capitalize">{bulkDialog.tipo_acao}</span>
+                    <span className="text-xs bg-[#4A6741]/15 text-[#4A6741] px-2 py-0.5 rounded-full font-medium">{bulkDialog.itens.length} animais</span>
+                  </div>
+                  <p className="text-xs text-[#7A8780] mt-2">
+                    Serão criados {bulkDialog.itens.length} eventos idênticos (um por animal).
+                  </p>
+                </div>
+
+                <div>
+                  <Label>Data *</Label>
+                  <Input type="date" value={bulkForm.data} onChange={(e) => setBulkForm({...bulkForm, data: e.target.value})} data-testid="bulk-data-input" />
+                </div>
+
+                {bulkDialog.tipo_acao === 'vacinacao' && (
+                  <div>
+                    <Label>Vacina aplicada</Label>
+                    <Input value={bulkForm.vacina} onChange={(e) => setBulkForm({...bulkForm, vacina: e.target.value})} placeholder="Ex: Aftosa, Brucelose..." data-testid="bulk-vacina-input" />
+                  </div>
+                )}
+
+                {bulkDialog.tipo_acao === 'pesagem' && (
+                  <div>
+                    <Label>Peso médio (kg)</Label>
+                    <div className="flex gap-2">
+                      <Input type="number" step="0.1" value={bulkForm.peso} onChange={(e) => setBulkForm({...bulkForm, peso: e.target.value})} className="flex-1" placeholder="Ex: 350" data-testid="bulk-peso-input" />
+                      <Select value={bulkForm.peso_tipo} onValueChange={(v) => setBulkForm({...bulkForm, peso_tipo: v})}>
+                        <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="aferido">Aferido</SelectItem>
+                          <SelectItem value="estimado">Estimado</SelectItem>
+                          <SelectItem value="medio">Médio</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <p className="text-xs text-[#7A8780] mt-1">⚠️ Todos os animais terão o mesmo peso atualizado.</p>
+                  </div>
+                )}
+
+                <div>
+                  <Label>Observações</Label>
+                  <Input value={bulkForm.detalhes} onChange={(e) => setBulkForm({...bulkForm, detalhes: e.target.value})} placeholder="Detalhes do evento..." data-testid="bulk-detalhes-input" />
+                </div>
+
+                <div className="max-h-[120px] overflow-y-auto bg-[#FAFAF7] rounded border border-[#E5E3DB] p-2">
+                  <p className="text-[10px] text-[#7A8780] uppercase tracking-wider mb-1">Animais ({bulkDialog.itens.length})</p>
+                  <div className="flex flex-wrap gap-1">
+                    {bulkDialog.itens.map((a, i) => (
+                      <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-white border border-[#E5E3DB] font-mono">{a.animal_tag}</span>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex gap-2 justify-end pt-2">
+                  <Button variant="outline" onClick={() => setBulkDialog(null)}>Cancelar</Button>
+                  <Button
+                    onClick={executarBulk}
+                    disabled={bulkLoading}
+                    className="bg-[#4A6741] hover:bg-[#3B5233] text-white"
+                    data-testid="bulk-confirm-btn"
+                  >
+                    {bulkLoading ? 'Registrando...' : <><Check size={16} className="mr-1" /> Registrar para {bulkDialog.itens.length}</>}
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

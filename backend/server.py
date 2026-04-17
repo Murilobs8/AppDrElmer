@@ -33,7 +33,7 @@ from models import (
     MovimentacaoCreate, Movimentacao, MovimentacaoBulkCreate,
     EntradaAnimalCreate, EntradaAnimalBulkCreate,
     ProducaoCreate, Producao, ProducaoBulkCreate,
-    EventoCreate, EventoBulkCreate, Evento,
+    EventoCreate, EventoBulkCreate, EventoBulkFromIdsCreate, Evento,
     DespesaCreate, Despesa, DespesaBulkCreate,
     ProtocoloVacinacao, CalendarioVacinacaoCreate, CalendarioVacinacaoUpdate,
     LembreteCondicao, LembreteCreate, Lembrete,
@@ -672,6 +672,45 @@ async def criar_evento_em_massa(input: EventoBulkCreate):
         eventos_criados.append({"animal_tag": animal["tag"], "id": evento.id})
     
     return {"total": len(eventos_criados), "eventos": eventos_criados}
+
+
+@api_router.post("/eventos/bulk-from-ids")
+async def criar_evento_para_animais(input: EventoBulkFromIdsCreate):
+    """
+    Cria o mesmo evento para uma lista específica de animal_ids.
+    Útil para registrar vacinação/pesagem/etc para um grupo de animais com um clique.
+    """
+    if not input.animal_ids:
+        raise HTTPException(status_code=400, detail="Lista de animal_ids vazia")
+
+    # Valida que todos os animais existem
+    existentes = await db.animais.find({"id": {"$in": input.animal_ids}}, {"_id": 0, "id": 1, "tag": 1}).to_list(10000)
+    ids_existentes = {a["id"]: a["tag"] for a in existentes}
+    nao_encontrados = [aid for aid in input.animal_ids if aid not in ids_existentes]
+    if nao_encontrados and len(nao_encontrados) == len(input.animal_ids):
+        raise HTTPException(status_code=404, detail="Nenhum animal da lista foi encontrado")
+
+    eventos_criados = []
+    for animal_id, tag in ids_existentes.items():
+        # Se pesagem, atualiza peso_atual do animal
+        if input.tipo == "pesagem" and input.peso is not None:
+            await db.animais.update_one({"id": animal_id}, {"$set": {"peso_atual": input.peso}})
+        evento = Evento(
+            tipo=input.tipo, animal_id=animal_id, data=input.data,
+            detalhes=input.detalhes or "", peso=input.peso, vacina=input.vacina
+        )
+        doc = prepare_for_db(evento.model_dump())
+        # peso_tipo (se existir) fica como metadata extra
+        if input.peso_tipo:
+            doc["peso_tipo"] = input.peso_tipo
+        await db.eventos.insert_one(doc)
+        eventos_criados.append({"animal_tag": tag, "animal_id": animal_id, "id": evento.id})
+
+    return {
+        "total": len(eventos_criados),
+        "eventos": eventos_criados,
+        "nao_encontrados": nao_encontrados,
+    }
 
 
 # ============= DESPESAS =============

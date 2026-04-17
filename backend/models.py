@@ -222,6 +222,16 @@ class EventoBulkCreate(BaseModel):
     peso: Optional[float] = None
     vacina: Optional[str] = None
 
+class EventoBulkFromIdsCreate(BaseModel):
+    """Criar mesmo evento para uma lista específica de animal_ids (ação em lote)."""
+    tipo: str
+    animal_ids: List[str]
+    data: date
+    detalhes: Optional[str] = ""
+    peso: Optional[float] = None
+    peso_tipo: Optional[str] = "aferido"
+    vacina: Optional[str] = None
+
 class Evento(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
