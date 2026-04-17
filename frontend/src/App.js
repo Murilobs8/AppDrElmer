@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard';
 import Animais from './pages/Animais';
 import Movimentacoes from './pages/Movimentacoes';
 import Eventos from './pages/Eventos';
+import Producao from './pages/Producao';
 import Despesas from './pages/Despesas';
 import Relatorios from './pages/Relatorios';
 import Login from './pages/Login';
@@ -69,6 +70,7 @@ function App() {
             <Route path="animais" element={<Animais />} />
             <Route path="movimentacoes" element={<Movimentacoes />} />
             <Route path="eventos" element={<Eventos />} />
+            <Route path="producao" element={<Producao />} />
             <Route path="despesas" element={<Despesas />} />
             <Route path="relatorios" element={<Relatorios />} />
             <Route path="lembretes" element={<Lembretes />} />

@@ -252,13 +252,46 @@ class Opcao(BaseModel):
     valor: str
 
 class MovimentacaoBulkCreate(BaseModel):
-    tipo: Literal["entrada", "saida", "producao"]
+    tipo: Literal["entrada", "saida"]
     motivo: str
     tag_prefixo: str
     tag_inicio: int
     tag_fim: int
     data: date
     valor: Optional[float] = None
+    observacoes: Optional[str] = ""
+
+
+# Entrada unificada: cria animal + movimentação atomicamente
+class EntradaAnimalCreate(BaseModel):
+    # Animal
+    tipo_animal: str  # Bovino, Suino, etc.
+    tag: str
+    sexo: Optional[str] = None
+    genitora_id: Optional[str] = None
+    data_nascimento: Optional[date] = None
+    peso_atual: Optional[float] = None
+    peso_tipo: Optional[str] = "aferido"
+    # Movimentação
+    motivo: str  # compra, nascimento, doacao, transferencia
+    data: date
+    valor: Optional[float] = None
+    observacoes: Optional[str] = ""
+
+
+class EntradaAnimalBulkCreate(BaseModel):
+    # Animal (em massa)
+    tipo_animal: str
+    tag_inicial: str  # ex: BOV-001
+    quantidade: int
+    sexo: Optional[str] = None
+    data_nascimento: Optional[date] = None
+    peso_atual: Optional[float] = None
+    peso_tipo: Optional[str] = "estimado"
+    # Movimentação
+    motivo: str  # compra, nascimento, doacao, transferencia
+    data: date
+    valor: Optional[float] = None  # valor por animal
     observacoes: Optional[str] = ""
 
 class AnimalCreate(BaseModel):
@@ -296,7 +329,7 @@ class Animal(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class MovimentacaoCreate(BaseModel):
-    tipo: Literal["entrada", "saida", "producao"]
+    tipo: Literal["entrada", "saida"]
     motivo: str
     animal_id: Optional[str] = None
     data: date
@@ -309,7 +342,7 @@ class MovimentacaoCreate(BaseModel):
 class Movimentacao(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    tipo: Literal["entrada", "saida", "producao"]
+    tipo: Literal["entrada", "saida", "producao"]  # producao aceita em leitura para compat
     motivo: str
     animal_id: Optional[str] = None
     data: date
@@ -319,6 +352,40 @@ class Movimentacao(BaseModel):
     tipo_animal: Optional[str] = None
     observacoes: Optional[str] = ""
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+# ============= PRODUCAO =============
+class ProducaoCreate(BaseModel):
+    motivo: str  # leite, ovos, mel, la, aluguel_pasto, servico_reproducao, adubo, couro, outros
+    data: date
+    valor: Optional[float] = None
+    quantidade: float = 1
+    unidade: Optional[str] = None
+    tipo_animal: Optional[str] = None
+    observacoes: Optional[str] = ""
+
+class Producao(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    motivo: str
+    data: date
+    valor: Optional[float] = None
+    quantidade: float = 1
+    unidade: Optional[str] = None
+    tipo_animal: Optional[str] = None
+    observacoes: Optional[str] = ""
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class ProducaoBulkCreate(BaseModel):
+    motivo: str
+    quantidade_registros: int
+    data_inicio: date
+    data_fim: Optional[date] = None
+    valor: Optional[float] = None
+    quantidade: float = 1
+    unidade: Optional[str] = None
+    tipo_animal: Optional[str] = None
+    observacoes: Optional[str] = ""
+    recorrente: bool = False  # se True, repete mensalmente
 
 class EventoCreate(BaseModel):
     tipo: str
@@ -752,6 +819,158 @@ async def criar_movimentacao_em_massa(input: MovimentacaoBulkCreate):
         movimentacoes_criadas.append({"animal_tag": animal["tag"], "id": mov.id})
     
     return {"total": len(movimentacoes_criadas), "movimentacoes": movimentacoes_criadas}
+
+
+# ============= ENTRADA UNIFICADA (animal + movimentacao atomicamente) =============
+
+async def _criar_animal_e_entrada(animal_data: dict, mov_data: dict):
+    """Helper: cria animal e movimentação de entrada vinculada. Retorna (animal, movimentacao)."""
+    animal = Animal(**animal_data)
+    animal_doc = prepare_for_db(animal.model_dump())
+    await db.animais.insert_one(animal_doc)
+
+    mov_data_copy = dict(mov_data)
+    mov_data_copy["animal_id"] = animal.id
+    mov_data_copy["tipo"] = "entrada"
+    mov = Movimentacao(**mov_data_copy)
+    mov_doc = prepare_for_db(mov.model_dump())
+    await db.movimentacoes.insert_one(mov_doc)
+    return animal, mov
+
+
+@api_router.post("/movimentacoes/entrada")
+async def criar_entrada_animal(input: EntradaAnimalCreate):
+    """Cria um animal + movimentação de entrada atomicamente."""
+    # Valida tag duplicada
+    existente = await db.animais.find_one({"tag": {"$regex": f"^{input.tag}$", "$options": "i"}})
+    if existente:
+        raise HTTPException(status_code=400, detail=f"Animal com tag '{input.tag}' ja existe")
+
+    animal_data = {
+        "tipo": input.tipo_animal,
+        "tag": input.tag,
+        "sexo": input.sexo,
+        "genitora_id": input.genitora_id if input.genitora_id and input.genitora_id != "none" else None,
+        "data_nascimento": input.data_nascimento,
+        "peso_atual": input.peso_atual,
+        "peso_tipo": input.peso_tipo or "aferido",
+        "observacoes": "",
+    }
+    mov_data = {
+        "motivo": input.motivo,
+        "data": input.data,
+        "valor": input.valor,
+        "quantidade": 1,
+        "tipo_animal": input.tipo_animal,
+        "observacoes": input.observacoes or "",
+    }
+    animal, mov = await _criar_animal_e_entrada(animal_data, mov_data)
+    return {"animal": serialize_doc(animal.model_dump()), "movimentacao": serialize_doc(mov.model_dump())}
+
+
+@api_router.post("/movimentacoes/entrada/bulk")
+async def criar_entrada_animal_em_massa(input: EntradaAnimalBulkCreate):
+    """Cria N animais (tags sequenciais) + N movimentações de entrada."""
+    import re
+    match = re.match(r'^(.*?)(\d+)$', input.tag_inicial)
+    if not match:
+        raise HTTPException(status_code=400, detail="Tag inicial deve terminar com numero. Ex: BOV-001")
+    prefixo = match.group(1)
+    numero_inicial = int(match.group(2))
+    tamanho_numero = len(match.group(2))
+
+    # Validar duplicadas
+    tags_duplicadas = []
+    for i in range(input.quantidade):
+        tag = f"{prefixo}{str(numero_inicial + i).zfill(tamanho_numero)}"
+        exists = await db.animais.find_one({"tag": {"$regex": f"^{tag}$", "$options": "i"}})
+        if exists:
+            tags_duplicadas.append(tag)
+    if tags_duplicadas:
+        raise HTTPException(status_code=400, detail=f"Tags ja existem: {', '.join(tags_duplicadas)}")
+
+    criados = []
+    for i in range(input.quantidade):
+        tag = f"{prefixo}{str(numero_inicial + i).zfill(tamanho_numero)}"
+        animal_data = {
+            "tipo": input.tipo_animal,
+            "tag": tag,
+            "sexo": input.sexo,
+            "data_nascimento": input.data_nascimento,
+            "peso_atual": input.peso_atual,
+            "peso_tipo": input.peso_tipo or "estimado",
+            "observacoes": "",
+        }
+        mov_data = {
+            "motivo": input.motivo,
+            "data": input.data,
+            "valor": input.valor,
+            "quantidade": 1,
+            "tipo_animal": input.tipo_animal,
+            "observacoes": input.observacoes or "",
+        }
+        animal, mov = await _criar_animal_e_entrada(animal_data, mov_data)
+        criados.append({"animal_id": animal.id, "tag": animal.tag, "movimentacao_id": mov.id})
+
+    return {"total": len(criados), "registros": criados}
+
+
+# ============= PRODUCAO =============
+
+@api_router.post("/producoes", response_model=Producao)
+async def criar_producao(input: ProducaoCreate):
+    producao = Producao(**input.model_dump())
+    doc = prepare_for_db(producao.model_dump())
+    await db.producoes.insert_one(doc)
+    return producao
+
+@api_router.get("/producoes", response_model=List[Producao])
+async def listar_producoes():
+    docs = await db.producoes.find({}, {"_id": 0}).sort("data", -1).to_list(5000)
+    return [serialize_doc(d) for d in docs]
+
+@api_router.put("/producoes/{producao_id}", response_model=Producao)
+async def atualizar_producao(producao_id: str, input: ProducaoCreate):
+    update_data = prepare_for_db(input.model_dump())
+    result = await db.producoes.update_one({"id": producao_id}, {"$set": update_data})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Producao nao encontrada")
+    doc = await db.producoes.find_one({"id": producao_id}, {"_id": 0})
+    return serialize_doc(doc)
+
+@api_router.delete("/producoes/{producao_id}")
+async def deletar_producao(producao_id: str):
+    result = await db.producoes.delete_one({"id": producao_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Producao nao encontrada")
+    return {"message": "Producao deletada"}
+
+@api_router.post("/producoes/bulk")
+async def criar_producao_em_massa(input: ProducaoBulkCreate):
+    producoes_criadas = []
+    data_atual = input.data_inicio
+    if input.recorrente and input.quantidade_registros > 1:
+        for i in range(input.quantidade_registros):
+            d = data_atual + timedelta(days=30 * i)
+            p = Producao(
+                motivo=input.motivo, data=d, valor=input.valor,
+                quantidade=input.quantidade, unidade=input.unidade,
+                tipo_animal=input.tipo_animal, observacoes=input.observacoes or ""
+            )
+            doc = prepare_for_db(p.model_dump())
+            await db.producoes.insert_one(doc)
+            producoes_criadas.append(p)
+    else:
+        for i in range(input.quantidade_registros):
+            p = Producao(
+                motivo=input.motivo, data=input.data_inicio, valor=input.valor,
+                quantidade=input.quantidade, unidade=input.unidade,
+                tipo_animal=input.tipo_animal, observacoes=input.observacoes or ""
+            )
+            doc = prepare_for_db(p.model_dump())
+            await db.producoes.insert_one(doc)
+            producoes_criadas.append(p)
+    return {"total": len(producoes_criadas), "producoes": [{"id": p.id} for p in producoes_criadas]}
 
 
 # ============= EVENTOS =============
@@ -1227,6 +1446,7 @@ async def obter_historico_animal(animal_id: str):
 async def obter_stats():
     animais = await db.animais.find({}, {"_id": 0}).to_list(10000)
     movimentacoes = await db.movimentacoes.find({}, {"_id": 0}).to_list(10000)
+    producoes = await db.producoes.find({}, {"_id": 0}).to_list(10000)
     despesas = await db.despesas.find({}, {"_id": 0}).to_list(10000)
     categorias = await db.categorias.find({}, {"_id": 0}).to_list(1000)
 
@@ -1235,7 +1455,12 @@ async def obter_stats():
     total_vendidos = len([a for a in animais if a.get("status") == "venda"])
     total_mortos = len([a for a in animais if a.get("status") in ["morte", "perda"]])
 
-    receitas = sum(m.get("valor", 0) or 0 for m in movimentacoes if (m.get("tipo") == "saida" and m.get("motivo") == "venda") or m.get("tipo") == "producao")
+    # Receitas: vendas (saida) + producoes (nova coleção) + movimentações antigas tipo=producao (compat)
+    receitas_vendas = sum(m.get("valor", 0) or 0 for m in movimentacoes if m.get("tipo") == "saida" and m.get("motivo") == "venda")
+    receitas_producao = sum(p.get("valor", 0) or 0 for p in producoes)
+    receitas_producao_legado = sum(m.get("valor", 0) or 0 for m in movimentacoes if m.get("tipo") == "producao")
+    receitas = receitas_vendas + receitas_producao + receitas_producao_legado
+
     total_despesas = sum(d.get("valor", 0) for d in despesas)
     custos_entrada = sum(m.get("valor", 0) or 0 for m in movimentacoes if m.get("tipo") == "entrada")
     total_despesas += custos_entrada
@@ -1247,10 +1472,19 @@ async def obter_stats():
         mes = str(data_str)[:7] if data_str else "unknown"
         if mes not in movimentacoes_mes:
             movimentacoes_mes[mes] = {"mes": mes, "receitas": 0, "despesas": 0}
-        if (m.get("tipo") == "saida" and m.get("motivo") == "venda") or m.get("tipo") == "producao":
+        if m.get("tipo") == "saida" and m.get("motivo") == "venda":
+            movimentacoes_mes[mes]["receitas"] += m.get("valor", 0) or 0
+        elif m.get("tipo") == "producao":
             movimentacoes_mes[mes]["receitas"] += m.get("valor", 0) or 0
         elif m.get("tipo") == "entrada":
             movimentacoes_mes[mes]["despesas"] += m.get("valor", 0) or 0
+
+    for p in producoes:
+        data_str = p.get("data")
+        mes = str(data_str)[:7] if data_str else "unknown"
+        if mes not in movimentacoes_mes:
+            movimentacoes_mes[mes] = {"mes": mes, "receitas": 0, "despesas": 0}
+        movimentacoes_mes[mes]["receitas"] += p.get("valor", 0) or 0
 
     for d in despesas:
         data_str = d.get("data")

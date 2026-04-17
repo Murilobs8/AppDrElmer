@@ -1,0 +1,47 @@
+{
+  "summary": "Completed backend testing of AppDrElmer 'Visão 2.0' restructuring. All 17 tests passed successfully covering: Produção CRUD, Produção bulk (recorrente/não-recorrente), Entrada unificada (animal+movimentação atômica), Entrada bulk com tags sequenciais, Rejeição de tipo='producao' em movimentações, Dashboard stats com produções, e Integridade do histórico do animal.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "TEST 1: POST /api/producoes - create production with motivo, data, valor, quantidade, unidade (returns id)",
+    "TEST 2: GET /api/producoes - list all productions",
+    "TEST 3: PUT /api/producoes/{id} - update production",
+    "TEST 4: DELETE /api/producoes/{id} - delete production",
+    "TEST 4b: DELETE /api/producoes/{id} - returns 404 for non-existent",
+    "TEST 3b: PUT /api/producoes/{id} - returns 404 for non-existent",
+    "TEST 5a: POST /api/producoes/bulk with recorrente=true - creates N records with 30-day intervals",
+    "TEST 5b: POST /api/producoes/bulk with recorrente=false - creates N records on same data_inicio",
+    "TEST 6a: POST /api/movimentacoes/entrada - creates ONE animal + ONE movimentacao atomically (response has {animal, movimentacao}, movimentacao.animal_id = animal.id)",
+    "TEST 6b: POST /api/movimentacoes/entrada - duplicate tag returns 400",
+    "TEST 7a: POST /api/movimentacoes/entrada/bulk - creates N animals with sequential tags (BOV-100 to BOV-104) + N movimentacoes",
+    "TEST 7b: POST /api/movimentacoes/entrada/bulk - duplicate tags returns 400",
+    "TEST 8a: POST /api/movimentacoes with tipo='producao' - returns 422 (Literal now only 'entrada'/'saida')",
+    "TEST 8b: POST /api/movimentacoes with tipo='entrada' - accepted",
+    "TEST 8c: POST /api/movimentacoes with tipo='saida' - accepted",
+    "TEST 9: GET /api/dashboard/stats - includes receitas from producoes (100) + vendas (200) = 300+",
+    "TEST 10: Integrity - after POST /api/movimentacoes/entrada, /api/animais/{id}/historico returns the movimentacao"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_visao_2_0.py",
+    "/app/test_reports/pytest/pytest_visao_2_0.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_visao_2_0.py"
+  ],
+  "success_rate": {
+    "backend": "100% (17/17 tests passed)"
+  },
+  "seed_data_creation": "Test data created and cleaned up automatically during tests using unique prefixes (T{uuid})",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "All 10 Visão 2.0 features have been tested and verified working: (1-4) Produção CRUD endpoints, (5) Produção bulk with recorrente=true/false, (6) Entrada unificada POST /api/movimentacoes/entrada creates animal+movimentacao atomically, (7) Entrada bulk POST /api/movimentacoes/entrada/bulk creates N animals with sequential tags, (8) POST /api/movimentacoes now rejects tipo='producao' with 422, (9) Dashboard stats includes receitas from new producoes collection, (10) Animal historico includes movimentacao after entrada. Test file at /app/backend/tests/test_visao_2_0.py can be reused for regression testing."
+}

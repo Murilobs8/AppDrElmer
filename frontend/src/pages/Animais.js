@@ -359,87 +359,26 @@ export default function Animais() {
           <p className="text-lg text-[#7A8780] mt-2">Gerencie o cadastro de animais ({animaisFiltrados.length} de {animais.length})</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Dialog open={dialogBulkOpen} onOpenChange={(open) => { setDialogBulkOpen(open); if (!open) resetBulkForm(); if (open) setSeqAbertaBulk(true); }}>
-            <DialogTrigger asChild>
-              <Button variant="outline" className="border-[#4A6741] text-[#4A6741] hover:bg-[#E8F0E6]" data-testid="bulk-animal-btn">
-                <CopySimple size={20} className="mr-2" /> Em Massa
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-h-[90vh] overflow-y-auto" data-testid="bulk-animal-dialog">
-              <DialogHeader><DialogTitle>Cadastro em Massa</DialogTitle></DialogHeader>
-              {sequencias.length > 0 && (
-                <div className="bg-[#F5F0E8] rounded-lg overflow-hidden mb-1">
-                  <button type="button" onClick={() => setSeqAbertaBulk(!seqAbertaBulk)} className="w-full flex items-center justify-between px-3 py-2 hover:bg-[#EDE7D9] transition-colors">
-                    <span className="text-xs font-semibold text-[#2F1810]">Sequencias existentes {!seqAbertaBulk && <span className="text-[#4A6741] font-mono ml-1">({sequencias.length})</span>}</span>
-                    <span className="text-[#7A8780] text-xs">{seqAbertaBulk ? '▲ Recolher' : '▼ Expandir'}</span>
-                  </button>
-                  {seqAbertaBulk && (
-                    <div className="px-3 pb-3 flex flex-wrap gap-1.5">
-                      {sequencias.map((seq, i) => (
-                        <button key={i} type="button" onClick={() => { setFormBulk({...formBulk, tag_inicial: seq.proxima_tag}); setSeqAbertaBulk(false); }} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white rounded-md border border-[#E5E3DB] hover:border-[#4A6741] hover:bg-[#E8F0E6] transition-all text-xs group">
-                          <span className="text-[#7A8780]">{seq.prefixo}</span>
-                          <span className="font-mono text-[#2F1810]">{seq.ultima_tag}</span>
-                          <span className="text-[#7A8780]">→</span>
-                          <span className="font-mono font-bold text-[#4A6741] group-hover:underline">{seq.proxima_tag}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-              <form onSubmit={handleBulkSubmit} className="space-y-4">
-                <div><Label>Tipo *</Label><SelectEditavel campo="tipo_animal" value={formBulk.tipo} onValueChange={(v) => setFormBulk({...formBulk, tipo: v})} placeholder="Selecione o tipo" opcoesPadrao={TIPOS_ANIMAIS} /></div>
-                <div><Label>Tag Inicial * (ex: BOV-001)</Label><Input value={formBulk.tag_inicial} onChange={(e) => setFormBulk({...formBulk, tag_inicial: e.target.value})} placeholder="BOV-001" required /><p className="text-xs text-[#7A8780] mt-1">Deve terminar com numero. Gera sequencialmente.</p></div>
-                <div><Label>Quantidade *</Label><Input type="number" min="2" max="500" value={formBulk.quantidade} onChange={(e) => setFormBulk({...formBulk, quantidade: e.target.value})} required /></div>
-                <div><Label>Sexo</Label><Select value={formBulk.sexo || 'none_sexo'} onValueChange={(v) => setFormBulk({...formBulk, sexo: v === 'none_sexo' ? '' : v})}><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent><SelectItem value="none_sexo">Nao informado</SelectItem>{SEXOS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent></Select></div>
-                <div><Label>Data de Nascimento</Label><div className="flex items-center gap-3"><Input type="date" value={formBulk.data_nascimento} onChange={(e) => setFormBulk({...formBulk, data_nascimento: e.target.value})} className="flex-1" />{formBulk.data_nascimento && <span className="text-sm font-medium text-[#4A6741] whitespace-nowrap">{formatarIdade(formBulk.data_nascimento)}</span>}</div></div>
-                <div><Label>Peso Medio Estimado (kg)</Label><div className="flex gap-2"><Input type="number" step="0.01" value={formBulk.peso_atual} onChange={(e) => setFormBulk({...formBulk, peso_atual: e.target.value})} placeholder="Ex: 350" className="flex-1" /><Select value={formBulk.peso_tipo || 'estimado'} onValueChange={(v) => setFormBulk({...formBulk, peso_tipo: v})}><SelectTrigger className="w-36"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="aferido">Aferido</SelectItem><SelectItem value="estimado">Estimado</SelectItem><SelectItem value="medio">Medio</SelectItem></SelectContent></Select></div></div>
-                <div><Label>Observacoes</Label><Input value={formBulk.observacoes} onChange={(e) => setFormBulk({...formBulk, observacoes: e.target.value})} /></div>
-                <div className="flex gap-2 justify-end"><Button type="button" variant="outline" onClick={() => setDialogBulkOpen(false)}>Cancelar</Button><Button type="submit" className="bg-[#4A6741] hover:bg-[#3B5334] text-white">Cadastrar</Button></div>
-              </form>
-            </DialogContent>
-          </Dialog>
-
-          <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); if (open) setSeqAbertaIndiv(true); }}>
-            <DialogTrigger asChild>
-              <Button className="bg-[#4A6741] hover:bg-[#3B5334] text-white" data-testid="add-animal-btn"><Plus size={20} className="mr-2" /> Novo Animal</Button>
-            </DialogTrigger>
-            <DialogContent className="max-h-[90vh] overflow-y-auto" data-testid="animal-dialog">
-              <DialogHeader><DialogTitle>{editando ? 'Editar Animal' : 'Novo Animal'}</DialogTitle></DialogHeader>
-              {!editando && sequencias.length > 0 && (
-                <div className="bg-[#F5F0E8] rounded-lg overflow-hidden mb-1">
-                  <button type="button" onClick={() => setSeqAbertaIndiv(!seqAbertaIndiv)} className="w-full flex items-center justify-between px-3 py-2 hover:bg-[#EDE7D9] transition-colors">
-                    <span className="text-xs font-semibold text-[#2F1810]">Sequencias existentes {!seqAbertaIndiv && <span className="text-[#4A6741] font-mono ml-1">({sequencias.length})</span>}</span>
-                    <span className="text-[#7A8780] text-xs">{seqAbertaIndiv ? '▲ Recolher' : '▼ Expandir'}</span>
-                  </button>
-                  {seqAbertaIndiv && (
-                    <div className="px-3 pb-3 flex flex-wrap gap-1.5">
-                      {sequencias.map((seq, i) => (
-                        <button key={i} type="button" onClick={() => { setFormData({...formData, tag: seq.proxima_tag}); setSeqAbertaIndiv(false); }} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white rounded-md border border-[#E5E3DB] hover:border-[#4A6741] hover:bg-[#E8F0E6] transition-all text-xs group">
-                          <span className="text-[#7A8780]">{seq.prefixo}</span>
-                          <span className="font-mono text-[#2F1810]">{seq.ultima_tag}</span>
-                          <span className="text-[#7A8780]">→</span>
-                          <span className="font-mono font-bold text-[#4A6741] group-hover:underline">{seq.proxima_tag}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div><Label>Tipo *</Label><SelectEditavel campo="tipo_animal" value={formData.tipo} onValueChange={(v) => setFormData({...formData, tipo: v})} placeholder="Selecione o tipo" opcoesPadrao={TIPOS_ANIMAIS} /></div>
-                <div><Label>Tag *</Label><Input value={formData.tag} onChange={(e) => setFormData({...formData, tag: e.target.value})} required /></div>
-                <div><Label>Sexo</Label><Select value={formData.sexo || 'none_sexo'} onValueChange={(v) => setFormData({...formData, sexo: v === 'none_sexo' ? '' : v})}><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent><SelectItem value="none_sexo">Nao informado</SelectItem>{SEXOS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent></Select></div>
-                <div><Label>Genitora (Mae)</Label><Select value={formData.genitora_id || 'none'} onValueChange={(v) => setFormData({...formData, genitora_id: v === 'none' ? '' : v})}><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent><SelectItem value="none">Nenhuma</SelectItem>{femeas.map(a => <SelectItem key={a.id} value={a.id}>{a.tag} - {a.tipo}</SelectItem>)}</SelectContent></Select></div>
-                <div><Label>Data de Nascimento</Label><div className="flex items-center gap-3"><Input type="date" value={formData.data_nascimento} onChange={(e) => setFormData({...formData, data_nascimento: e.target.value})} className="flex-1" />{formData.data_nascimento && <span className="text-sm font-medium text-[#4A6741] whitespace-nowrap">{formatarIdade(formData.data_nascimento)}</span>}</div></div>
-                <div><Label>Peso (kg)</Label><div className="flex gap-2"><Input type="number" step="0.01" value={formData.peso_atual} onChange={(e) => setFormData({...formData, peso_atual: e.target.value})} className="flex-1" /><Select value={formData.peso_tipo || 'aferido'} onValueChange={(v) => setFormData({...formData, peso_tipo: v})}><SelectTrigger className="w-36"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="aferido">Aferido</SelectItem><SelectItem value="estimado">Estimado</SelectItem><SelectItem value="medio">Medio</SelectItem></SelectContent></Select></div></div>
-                <div><Label>Observacoes</Label><Input value={formData.observacoes} onChange={(e) => setFormData({...formData, observacoes: e.target.value})} /></div>
-                <div className="flex gap-2 justify-end"><Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button><Button type="submit" className="bg-[#4A6741] hover:bg-[#3B5334] text-white">{editando ? 'Atualizar' : 'Salvar'}</Button></div>
-              </form>
-            </DialogContent>
-          </Dialog>
+          {/* Botões de cadastro removidos. Cadastro de animal agora é feito em Movimentações > Entrada. */}
         </div>
       </div>
+
+      {/* Dialog standalone para edição de animal (acionado pelo ícone Pencil na tabela) */}
+      <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto" data-testid="animal-edit-dialog">
+          <DialogHeader><DialogTitle>{editando ? 'Editar Animal' : 'Novo Animal'}</DialogTitle></DialogHeader>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div><Label>Tipo *</Label><SelectEditavel campo="tipo_animal" value={formData.tipo} onValueChange={(v) => setFormData({...formData, tipo: v})} placeholder="Selecione o tipo" opcoesPadrao={TIPOS_ANIMAIS} /></div>
+            <div><Label>Tag *</Label><Input value={formData.tag} onChange={(e) => setFormData({...formData, tag: e.target.value})} required /></div>
+            <div><Label>Sexo</Label><Select value={formData.sexo || 'none_sexo'} onValueChange={(v) => setFormData({...formData, sexo: v === 'none_sexo' ? '' : v})}><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent><SelectItem value="none_sexo">Não informado</SelectItem>{SEXOS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent></Select></div>
+            <div><Label>Genitora (Mãe)</Label><Select value={formData.genitora_id || 'none'} onValueChange={(v) => setFormData({...formData, genitora_id: v === 'none' ? '' : v})}><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent><SelectItem value="none">Nenhuma</SelectItem>{femeas.map(a => <SelectItem key={a.id} value={a.id}>{a.tag} - {a.tipo}</SelectItem>)}</SelectContent></Select></div>
+            <div><Label>Data de Nascimento</Label><div className="flex items-center gap-3"><Input type="date" value={formData.data_nascimento} onChange={(e) => setFormData({...formData, data_nascimento: e.target.value})} className="flex-1" />{formData.data_nascimento && <span className="text-sm font-medium text-[#4A6741] whitespace-nowrap">{formatarIdade(formData.data_nascimento)}</span>}</div></div>
+            <div><Label>Peso (kg)</Label><div className="flex gap-2"><Input type="number" step="0.01" value={formData.peso_atual} onChange={(e) => setFormData({...formData, peso_atual: e.target.value})} className="flex-1" /><Select value={formData.peso_tipo || 'aferido'} onValueChange={(v) => setFormData({...formData, peso_tipo: v})}><SelectTrigger className="w-36"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="aferido">Aferido</SelectItem><SelectItem value="estimado">Estimado</SelectItem><SelectItem value="medio">Médio</SelectItem></SelectContent></Select></div></div>
+            <div><Label>Observações</Label><Input value={formData.observacoes} onChange={(e) => setFormData({...formData, observacoes: e.target.value})} /></div>
+            <div className="flex gap-2 justify-end"><Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button><Button type="submit" className="bg-[#4A6741] hover:bg-[#3B5334] text-white">Atualizar</Button></div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Sequencias de Tags */}
       <div className="mb-4">

@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { ChartLine, Cow, ArrowsLeftRight, Calendar, CurrencyDollar, FileText, List, X, UsersThree, SignOut, Bell } from '@phosphor-icons/react';
+import { ChartLine, Cow, ArrowsLeftRight, Calendar, CurrencyDollar, FileText, List, X, UsersThree, SignOut, Bell, Drop } from '@phosphor-icons/react';
 import NotificationBell from './NotificationBell';
 
 const baseNavigation = [
   { name: 'Dashboard', path: '/', icon: ChartLine },
-  { name: 'Animais', path: '/animais', icon: Cow },
   { name: 'Movimentacoes', path: '/movimentacoes', icon: ArrowsLeftRight },
+  { name: 'Animais', path: '/animais', icon: Cow },
   { name: 'Eventos', path: '/eventos', icon: Calendar },
+  { name: 'Producao', path: '/producao', icon: Drop },
   { name: 'Despesas', path: '/despesas', icon: CurrencyDollar },
   { name: 'Lembretes', path: '/lembretes', icon: Bell },
   { name: 'Relatorios', path: '/relatorios', icon: FileText },
