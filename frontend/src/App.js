@@ -13,6 +13,7 @@ import Login from './pages/Login';
 import Usuarios from './pages/Usuarios';
 import Lembretes from './pages/Lembretes';
 import { Toaster } from './components/ui/sonner';
+import { ConfigProvider } from './contexts/ConfigContext';
 import './App.css';
 
 // Register Service Worker for push notifications
@@ -64,25 +65,27 @@ function App() {
 
   return (
     <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Layout user={user} onLogout={handleLogout} />}>
-            <Route index element={<Dashboard />} />
-            <Route path="animais" element={<Animais />} />
-            <Route path="movimentacoes" element={<Movimentacoes />} />
-            <Route path="eventos" element={<Eventos />} />
-            <Route path="producao" element={<Producao />} />
-            <Route path="despesas" element={<Despesas />} />
-            <Route path="relatorios" element={<Relatorios />} />
-            <Route path="lembretes" element={<Lembretes />} />
-            {user.role === 'admin' && (
-              <Route path="usuarios" element={<Usuarios />} />
-            )}
-          </Route>
-          <Route path="*" element={<Navigate to="/" />} />
-        </Routes>
-      </BrowserRouter>
-      <Toaster position="bottom-right" />
+      <ConfigProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Layout user={user} onLogout={handleLogout} />}>
+              <Route index element={<Dashboard />} />
+              <Route path="animais" element={<Animais />} />
+              <Route path="movimentacoes" element={<Movimentacoes />} />
+              <Route path="eventos" element={<Eventos />} />
+              <Route path="producao" element={<Producao />} />
+              <Route path="despesas" element={<Despesas />} />
+              <Route path="relatorios" element={<Relatorios />} />
+              <Route path="lembretes" element={<Lembretes />} />
+              {user.role === 'admin' && (
+                <Route path="usuarios" element={<Usuarios />} />
+              )}
+            </Route>
+            <Route path="*" element={<Navigate to="/" />} />
+          </Routes>
+        </BrowserRouter>
+        <Toaster position="bottom-right" />
+      </ConfigProvider>
     </ThemeProvider>
   );
 }

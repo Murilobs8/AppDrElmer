@@ -333,3 +333,17 @@ class DashboardStats(BaseModel):
     lucro: float
     movimentacoes_mes: List[dict]
     despesas_por_categoria: List[dict]
+
+
+
+# ============= CONFIGURAÇÕES =============
+
+class ConfiguracaoUpdate(BaseModel):
+    nome_fazenda: Optional[str] = None
+    subtitulo: Optional[str] = None
+
+class Configuracao(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    nome_fazenda: str = "Filadélfia"
+    subtitulo: str = "Gestão Rural"
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

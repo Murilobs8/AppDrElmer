@@ -4,46 +4,54 @@
 Usuário iniciante em desenvolvimento trouxe um repositório público (https://github.com/Murilobs8/AppDrElmer.git) pedindo para melhorar o projeto (refatoração, melhorias UX/UI e novas funcionalidades).
 
 ## Arquitetura
-- **Frontend**: React 19 + TailwindCSS + Radix/shadcn + React Router 7 + Recharts
+- **Frontend**: React 19 + TailwindCSS + Radix/shadcn + React Router 7 + Recharts + Context API
 - **Backend**: FastAPI (Python) + Motor (MongoDB async) + JWT (access + refresh cookies)
-- **Banco**: MongoDB (coleções: users, categorias, despesas, animais, movimentacoes, producoes, eventos, lembretes)
+- **Banco**: MongoDB (coleções: users, categorias, despesas, animais, movimentacoes, producoes, eventos, lembretes, configuracoes)
 - **Infra**: Supervisor (backend:8001, frontend:3000), deploy na Emergent
-- **Cross-component**: EventBus (eventBus.js) para invalidar/atualizar dados entre páginas
+- **Cross-component**: EventBus para invalidação de dados + ConfigContext para config global
 
-## Estrutura do Backend (Refatorada)
-- `server.py`: ~1712 linhas (endpoints FastAPI)
-- `models.py`: Schemas Pydantic
-- `helpers.py`: funções utilitárias (`prepare_for_db`, `serialize_doc`, etc)
-- `security.py`: JWT / auth / cookies
+## Estrutura do Backend
+- `server.py`: endpoints FastAPI
+- `models.py`: Schemas Pydantic (inclui `Configuracao`, `ConfiguracaoUpdate`)
+- `helpers.py`: utilitários
+- `security.py`: JWT / auth
 - `constants.py`: CALENDARIO_PADRAO
+
+## Estrutura do Frontend
+- `pages/`: Dashboard, Animais, Movimentacoes, Eventos, Producao, Despesas, Lembretes, Relatorios, Usuarios
+- `components/`: Layout, NotificationBell, CommandPalette, Pagination, ConfigDialog, ui/ (shadcn)
+- `contexts/ConfigContext.js`: provider global de configurações
+- `lib/`: api.js, eventBus.js
 
 ## Funcionalidades Implementadas
 
-### Básicas (pré-existentes)
-- Auth JWT (login/logout/refresh)
-- CRUD Animais, Movimentações, Eventos, Despesas, Lembretes, Usuários
-- Dashboard com gráficos
+### Visão 2.0 (sessão anterior)
+- Coleção `producoes` separada + aba dedicada
+- Cadastro de animal atomicamente via `POST /api/movimentacoes/entrada`
+- Eventos agrupados por tipo+data; Calendário de Vacinação movido para aba Eventos
+- Dark Mode, Paginação, Busca Global (Ctrl+K)
+- Alertas Hierárquicos em 3 níveis
+- Ações em Lote via `POST /api/eventos/bulk-from-ids`
 
-### Visão 2.0 (refatoração realizada nesta sessão)
-- **Produção separada**: Nova coleção `producoes` + aba dedicada + mini-dashboard
-- **Entrada unificada**: Cadastro de animal é criado via `POST /api/movimentacoes/entrada` (atomically cria animal + movimentação)
-- **Eventos agrupados** por tipo+data, com Calendário de Vacinação integrado na aba Eventos
-- **Dark Mode** (`next-themes`) com contraste ajustado em gráficos, alerts e badges
-- **Paginação** (100 itens) em todas as tabelas principais
-- **Busca Global** (Ctrl+K) via CommandPalette
-- **Alertas Hierárquicos** em 3 níveis: Tipo de Ação → Regra de Lembrete → Animais
-- **Ações em Lote** (Bulk): botão "Registrar para todos" em cada regra do Lembrete abre modal para criar N eventos idênticos (vacinação/pesagem/etc) com um clique — usa `POST /api/eventos/bulk-from-ids`
+### Esta sessão
+- **Card redundante removido** do histórico de animais (resumo_eventos)
+- **Histórico agrupado por tipo** (VACINACAO, VENDA, PESAGEM, etc) com contagem por grupo
+- **Badges clicáveis como filtros** no histórico (vacina, peso, valor, tipo-registro, subtipo)
+- **Rename de Dashboard → Filadélfia** (depois transformado em config dinâmica)
+- **Configuração Persistente** — novo endpoint/modal:
+  - GET/PUT `/api/configuracoes` (campos: nome_fazenda, subtitulo)
+  - ConfigContext carrega e sincroniza config entre páginas
+  - ConfigDialog acessível via ícone de engrenagem (admin-only)
+  - nome_fazenda aparece em: item principal do menu, H1 do Dashboard, `document.title`
+  - subtitulo aparece em: topo da sidebar, header mobile
 
 ## Endpoints Chave
 - `POST /api/auth/login`
-- `POST /api/movimentacoes/entrada` — cria animal + movimentação atomicamente
-- `POST /api/eventos/bulk-from-ids` — cria mesmo evento para lista de animais (bulk action)
-- `GET /api/producoes`
-- `GET /api/lembretes/alertas` — retorna alertas agrupados
-
-## Mudanças de Schema
-- `producao` migrado de `movimentacoes` para coleção própria `producoes`
-- Adicionado campo `peso_tipo` (aferido/estimado/medio) em eventos de pesagem
+- `POST /api/movimentacoes/entrada` — atomic animal + movimentação
+- `POST /api/eventos/bulk-from-ids` — bulk event
+- `GET /api/configuracoes` / `PUT /api/configuracoes` — config persistente
+- `GET /api/animais/{id}/historico` — histórico combinado
+- `GET /api/lembretes/alertas` — alertas agrupados
 
 ## Credenciais de Teste
 Ver `/app/memory/test_credentials.md`
@@ -51,11 +59,13 @@ Ver `/app/memory/test_credentials.md`
 ## Backlog / Roadmap
 
 ### P2 (baixa prioridade)
-- Banner dismissível no Dashboard explicando mudanças da "Visão 2.0" (Cadastro de animais agora em Movimentações → Entrada; Produção como aba própria)
-- Replicar "Registrar para todos" dentro do `NotificationBell.js` (sino no header) — usuário adiou
+- Replicar "Registrar para todos" dentro do `NotificationBell.js`
+- Banner dismissível no Dashboard explicando mudanças da "Visão 2.0"
+- Indicadores de evolução nos cabeçalhos de grupos do histórico (ex: "+15kg" em PESAGEM)
 
 ### Ideias Futuras
 - Exportação de relatórios em PDF/Excel
-- Filtros avançados em Animais (por genitor, status, idade)
-- Notificações Web Push já têm VAPID configurado — pode expandir cobertura
-- Gráfico temporal de produção por mês/categoria
+- Filtros avançados em Animais
+- Expansão das Web Push notifications
+- Gráfico temporal de produção
+- Logo/imagem customizada da fazenda (expandir config)

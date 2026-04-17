@@ -3,12 +3,14 @@ import api from '../lib/api';
 import { Cow, TrendUp, CurrencyDollar, Warning } from '@phosphor-icons/react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { toast } from 'sonner';
+import { useConfig } from '../contexts/ConfigContext';
 
 const COLORS = ['#4A6741', '#C25934', '#D99B29', '#2B6CB0', '#3B823E'];
 
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const { config } = useConfig();
 
   useEffect(() => {
     carregarStats();
@@ -84,7 +86,7 @@ export default function Dashboard() {
     <div className="fade-in" data-testid="dashboard-page">
       <div className="mb-8">
         <h1 className="text-4xl sm:text-5xl font-semibold tracking-tight text-[#1B2620]" data-testid="dashboard-title">
-          Filadélfia
+          {config.nome_fazenda || 'Dashboard'}
         </h1>
         <p className="text-lg text-[#7A8780] mt-2">Visão geral da sua fazenda</p>
       </div>

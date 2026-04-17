@@ -38,6 +38,7 @@ from models import (
     ProtocoloVacinacao, CalendarioVacinacaoCreate, CalendarioVacinacaoUpdate,
     LembreteCondicao, LembreteCreate, Lembrete,
     DashboardStats,
+    Configuracao, ConfiguracaoUpdate,
 )
 from helpers import serialize_doc, prepare_for_db
 from security import (
@@ -1664,6 +1665,33 @@ async def verificar_e_notificar(request: Request):
                 await db.push_subscriptions.delete_many({"endpoint": {"$in": dead_subs}})
     
     return {"new_notifications": len(new_notifications), "total_alerts": len(alertas)}
+
+
+# ============= CONFIGURAÇÕES =============
+
+@api_router.get("/configuracoes", response_model=Configuracao)
+async def obter_configuracao():
+    """Retorna configuração única da aplicação. Cria default se não existir."""
+    doc = await db.configuracoes.find_one({}, {"_id": 0})
+    if not doc:
+        cfg = Configuracao()
+        await db.configuracoes.insert_one(prepare_for_db(cfg.model_dump()))
+        return cfg
+    return Configuracao(**doc)
+
+@api_router.put("/configuracoes", response_model=Configuracao)
+async def atualizar_configuracao(input: ConfiguracaoUpdate):
+    """Atualiza configuração única. Cria se não existir."""
+    doc = await db.configuracoes.find_one({}, {"_id": 0})
+    if not doc:
+        cfg = Configuracao()
+        doc = cfg.model_dump()
+    updates = {k: v for k, v in input.model_dump().items() if v is not None}
+    if updates:
+        doc.update(updates)
+        doc["updated_at"] = datetime.now(timezone.utc)
+        await db.configuracoes.update_one({"id": doc["id"]}, {"$set": prepare_for_db(doc)}, upsert=True)
+    return Configuracao(**doc)
 
 
 # ============= APP SETUP =============

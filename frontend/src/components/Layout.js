@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useTheme } from 'next-themes';
-import { ChartLine, Cow, ArrowsLeftRight, Calendar, CurrencyDollar, FileText, List, X, UsersThree, SignOut, Bell, Drop, Sun, Moon, MagnifyingGlass } from '@phosphor-icons/react';
+import { ChartLine, Cow, ArrowsLeftRight, Calendar, CurrencyDollar, FileText, List, X, UsersThree, SignOut, Bell, Drop, Sun, Moon, MagnifyingGlass, Gear } from '@phosphor-icons/react';
 import NotificationBell from './NotificationBell';
 import CommandPalette from './CommandPalette';
+import ConfigDialog from './ConfigDialog';
+import { useConfig } from '../contexts/ConfigContext';
 
 const baseNavigation = [
-  { name: 'Filadélfia', path: '/', icon: ChartLine },
   { name: 'Movimentacoes', path: '/movimentacoes', icon: ArrowsLeftRight },
   { name: 'Animais', path: '/animais', icon: Cow },
   { name: 'Eventos', path: '/eventos', icon: Calendar },
@@ -20,7 +21,9 @@ export default function Layout({ user, onLogout }) {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [cmdOpen, setCmdOpen] = useState(false);
+  const [configOpen, setConfigOpen] = useState(false);
   const { theme, setTheme } = useTheme();
+  const { config } = useConfig();
 
   // Atalho Ctrl+K / ⌘K para abrir busca global
   React.useEffect(() => {
@@ -34,9 +37,11 @@ export default function Layout({ user, onLogout }) {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
+  // Item principal (Dashboard) usa nome dinâmico da fazenda
+  const dashboardItem = { name: config.nome_fazenda || 'Dashboard', path: '/', icon: ChartLine };
   const navigation = user?.role === 'admin'
-    ? [...baseNavigation, { name: 'Usuarios', path: '/usuarios', icon: UsersThree }]
-    : baseNavigation;
+    ? [dashboardItem, ...baseNavigation, { name: 'Usuarios', path: '/usuarios', icon: UsersThree }]
+    : [dashboardItem, ...baseNavigation];
 
   return (
     <div className="min-h-screen flex" data-testid="main-layout">
@@ -56,7 +61,7 @@ export default function Layout({ user, onLogout }) {
       >
         <div className="flex flex-col h-full">
           <div className="flex items-center justify-between p-6 border-b border-[#2A3730]">
-            <h1 className="text-xl font-semibold text-[#E5E3DB]" data-testid="app-title">Gestao Rural</h1>
+            <h1 className="text-xl font-semibold text-[#E5E3DB]" data-testid="app-title">{config.subtitulo || 'Gestão Rural'}</h1>
             <div className="flex items-center gap-1">
               <button
                 onClick={() => setCmdOpen(true)}
@@ -74,6 +79,16 @@ export default function Layout({ user, onLogout }) {
               >
                 {theme === 'dark' ? <Sun size={18} weight="fill" /> : <Moon size={18} />}
               </button>
+              {user?.role === 'admin' && (
+                <button
+                  onClick={() => setConfigOpen(true)}
+                  className="p-1.5 rounded-lg text-[#E5E3DB] hover:bg-[#2A3730]"
+                  data-testid="open-config-btn"
+                  title="Configurações"
+                >
+                  <Gear size={18} />
+                </button>
+              )}
               <div className="hidden lg:block">
                 <NotificationBell />
               </div>
@@ -138,7 +153,7 @@ export default function Layout({ user, onLogout }) {
             >
               <List size={24} />
             </button>
-            <h1 className="text-lg font-semibold text-[#1B2620]">Gestao Rural</h1>
+            <h1 className="text-lg font-semibold text-[#1B2620]">{config.subtitulo || 'Gestão Rural'}</h1>
           </div>
           <NotificationBell />
         </header>
@@ -148,6 +163,7 @@ export default function Layout({ user, onLogout }) {
         </main>
       </div>
       <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
+      <ConfigDialog open={configOpen} onClose={() => setConfigOpen(false)} />
     </div>
   );
 }
