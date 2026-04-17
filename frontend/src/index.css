@@ -122,7 +122,98 @@ h1, h2, h3, h4, h5, h6 {
 
     /* Links/botões ativos */
     .dark .hover\:bg-\[\#F5F0E8\]:hover { background-color: #243029 !important; }
-    .dark .hover\:bg-\[\#4A6741\]\/10:hover { background-color: rgba(90, 119, 81, 0.15) !important; }
+    .dark .hover\:bg-\[\#4A6741\]\/10:hover { background-color: rgba(168, 208, 154, 0.12) !important; }
+
+    /* ===== MELHORIAS DE CONTRASTE DE TEXTOS VERDES ===== */
+    /* Todo text-[#4A6741], text-[#3B823E], text-[#3B5334] (verdes do app) vira verde claro no dark */
+    .dark .text-\[\#4A6741\],
+    .dark .text-\[\#3B823E\],
+    .dark .text-\[\#3B5334\],
+    .dark .text-\[\#3B5233\],
+    .dark .text-\[\#2F6B31\] { color: #A8D09A !important; }
+
+    /* Textos verdes dentro de badges que têm fundo .bg-[#4A6741]/10 etc - cor mais viva */
+    .dark .bg-\[\#4A6741\]\/10 { background-color: rgba(168, 208, 154, 0.14) !important; }
+    .dark .bg-\[\#4A6741\]\/15 { background-color: rgba(168, 208, 154, 0.18) !important; }
+    .dark .bg-\[\#4A6741\]\/20 { background-color: rgba(168, 208, 154, 0.22) !important; }
+    .dark .bg-\[\#4A6741\]\/5 { background-color: rgba(168, 208, 154, 0.08) !important; }
+
+    /* Botões/backgrounds verdes sólidos mais claros no dark */
+    .dark .bg-\[\#3B823E\] { background-color: #5C9F5A !important; }
+    .dark .bg-\[\#3B5233\],
+    .dark .bg-\[\#3B5334\] { background-color: #4B7A48 !important; }
+
+    /* Hover dos botões verdes */
+    .dark .hover\:bg-\[\#3B5334\]:hover,
+    .dark .hover\:bg-\[\#3B5233\]:hover,
+    .dark .hover\:bg-\[\#2F6B31\]:hover { background-color: #3F6B3E !important; }
+
+    /* Bordas verdes em outline buttons */
+    .dark .border-\[\#4A6741\],
+    .dark .border-\[\#3B823E\] { border-color: #A8D09A !important; }
+
+    /* TÍTULOS H1-H3 explícitos - garantir contraste alto no dark */
+    .dark h1,
+    .dark h2,
+    .dark h3,
+    .dark h4 { color: #F1EAD9 !important; }
+
+    /* Textos em amarelos/laranjas do tema ficam mais claros no dark */
+    .dark .text-\[\#D99B29\] { color: #F2BC5A !important; }
+    .dark .text-\[\#B45309\] { color: #E8A34A !important; }
+    .dark .bg-\[\#D99B29\]\/15 { background-color: rgba(242, 188, 90, 0.18) !important; }
+    .dark .bg-\[\#FFF3E0\] { background-color: #2A2418 !important; }
+    .dark .bg-\[\#E8F0E6\] { background-color: rgba(168, 208, 154, 0.14) !important; }
+
+    /* Text secundário no hover de links de animal */
+    .dark .hover\:bg-\[\#4A6741\]:hover { background-color: #5A7751 !important; color: #FFF !important; }
+
+    /* Cards com text color classes específicas (ex: stat-cards do Dashboard) */
+    .dark .text-\[#4A6741\] { color: #A8D09A !important; }
+
+    /* ===== RECHARTS (gráficos) NO DARK ===== */
+    .dark .recharts-cartesian-axis-tick text,
+    .dark .recharts-text,
+    .dark .recharts-legend-item-text { fill: #B8C4BF !important; color: #B8C4BF !important; }
+    .dark .recharts-cartesian-grid line { stroke: #2A3530 !important; }
+    .dark .recharts-cartesian-axis line,
+    .dark .recharts-cartesian-axis-line { stroke: #3A453F !important; }
+    .dark .recharts-tooltip-wrapper > .recharts-default-tooltip {
+      background-color: #1B2620 !important;
+      border: 1px solid #3A453F !important;
+      border-radius: 8px !important;
+    }
+    .dark .recharts-tooltip-wrapper .recharts-tooltip-item,
+    .dark .recharts-tooltip-wrapper .recharts-tooltip-label { color: #E5E3DB !important; }
+
+    /* Bordas específicas para alertas em dark (amarelo/vermelho) */
+    .dark .border-red-300 { border-color: #7A3434 !important; }
+    .dark .border-amber-300 { border-color: #7A5E34 !important; }
+    .dark .bg-red-50\/50 { background-color: rgba(74, 26, 26, 0.4) !important; }
+    .dark .bg-red-50\/30 { background-color: rgba(74, 26, 26, 0.25) !important; }
+    .dark .bg-red-50\/60 { background-color: rgba(74, 26, 26, 0.45) !important; }
+    .dark .bg-amber-50\/30 { background-color: rgba(74, 56, 26, 0.25) !important; }
+    .dark .bg-amber-50\/50 { background-color: rgba(74, 56, 26, 0.4) !important; }
+    .dark .bg-amber-50\/60 { background-color: rgba(74, 56, 26, 0.45) !important; }
+
+    /* Badges de contagem */
+    .dark .bg-red-100 { background-color: #4A1F1F !important; }
+    .dark .bg-red-200 { background-color: #6B2A2A !important; }
+    .dark .text-red-600,
+    .dark .text-red-700 { color: #F4A8A8 !important; }
+    .dark .bg-amber-100 { background-color: #4A3E1A !important; }
+    .dark .bg-amber-200 { background-color: #6B5A2A !important; }
+    .dark .text-amber-600,
+    .dark .text-amber-700 { color: #F2D08A !important; }
+    .dark .bg-green-100,
+    .dark .bg-green-200 { background-color: #1F4A2E !important; }
+    .dark .text-green-600,
+    .dark .text-green-700 { color: #A8D09A !important; }
+    .dark .bg-blue-50,
+    .dark .bg-blue-100 { background-color: #1F2F4A !important; }
+    .dark .text-blue-600 { color: #9FC0EB !important; }
+    .dark .bg-pink-50 { background-color: #4A1F30 !important; }
+    .dark .text-pink-600 { color: #F0A8C0 !important; }
 }
 
 @layer base {

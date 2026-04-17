@@ -128,13 +128,13 @@ export default function Dashboard() {
             <h3 className="text-xl font-medium text-[#1B2620] mb-6">Receitas vs Despesas</h3>
             <ResponsiveContainer width="100%" height={300}>
               <LineChart data={stats.movimentacoes_mes}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E5E3DB" />
-                <XAxis dataKey="mes" stroke="#7A8780" />
-                <YAxis stroke="#7A8780" />
+                <CartesianGrid strokeDasharray="3 3" className="recharts-grid-custom" />
+                <XAxis dataKey="mes" />
+                <YAxis />
                 <Tooltip />
                 <Legend />
-                <Line type="monotone" dataKey="receitas" stroke="#3B823E" strokeWidth={2} name="Receitas" />
-                <Line type="monotone" dataKey="despesas" stroke="#C25934" strokeWidth={2} name="Despesas" />
+                <Line type="monotone" dataKey="receitas" stroke="#5C9F5A" strokeWidth={2} name="Receitas" />
+                <Line type="monotone" dataKey="despesas" stroke="#E87153" strokeWidth={2} name="Despesas" />
               </LineChart>
             </ResponsiveContainer>
           </div>
