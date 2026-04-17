@@ -84,7 +84,7 @@ export default function Dashboard() {
     <div className="fade-in" data-testid="dashboard-page">
       <div className="mb-8">
         <h1 className="text-4xl sm:text-5xl font-semibold tracking-tight text-[#1B2620]" data-testid="dashboard-title">
-          Dashboard
+          Filadélfia
         </h1>
         <p className="text-lg text-[#7A8780] mt-2">Visão geral da sua fazenda</p>
       </div>

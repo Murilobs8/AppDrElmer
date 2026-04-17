@@ -6,7 +6,7 @@ import NotificationBell from './NotificationBell';
 import CommandPalette from './CommandPalette';
 
 const baseNavigation = [
-  { name: 'Dashboard', path: '/', icon: ChartLine },
+  { name: 'Filadélfia', path: '/', icon: ChartLine },
   { name: 'Movimentacoes', path: '/movimentacoes', icon: ArrowsLeftRight },
   { name: 'Animais', path: '/animais', icon: Cow },
   { name: 'Eventos', path: '/eventos', icon: Calendar },
