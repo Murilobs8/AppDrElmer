@@ -113,29 +113,53 @@ export default function Lembretes() {
   const tiposAlerta = [...new Set(alertas.map(a => a.tipo_acao))].sort();
   const alertasFiltrados = filtroTipoAlerta ? alertas.filter(a => a.tipo_acao === filtroTipoAlerta) : alertas;
 
-  // Agrupa alertas por (lembrete_nome + tipo_acao). Se lembrete_nome estiver vazio, usa "Geral"
+  // Agrupamento em 3 níveis: tipo_acao → lembrete_nome → animais
   const gruposAlertas = useMemo(() => {
-    const map = new Map();
+    // Nivel 1: tipo_acao
+    const porAcao = new Map();
     for (const a of alertasFiltrados) {
-      const key = `${a.lembrete_nome || 'Geral'}||${a.tipo_acao}`;
-      if (!map.has(key)) {
-        map.set(key, {
-          lembrete_nome: a.lembrete_nome || 'Geral',
-          tipo_acao: a.tipo_acao,
+      const tipoKey = a.tipo_acao || 'outro';
+      if (!porAcao.has(tipoKey)) {
+        porAcao.set(tipoKey, {
+          tipo_acao: tipoKey,
+          itensTotal: 0,
+          urgentesTotal: 0,
+          lembretes: new Map(),
+        });
+      }
+      const grupoAcao = porAcao.get(tipoKey);
+      grupoAcao.itensTotal += 1;
+      if (a.urgente) grupoAcao.urgentesTotal += 1;
+
+      // Nivel 2: lembrete_nome
+      const lembKey = a.lembrete_nome || 'Geral';
+      if (!grupoAcao.lembretes.has(lembKey)) {
+        grupoAcao.lembretes.set(lembKey, {
+          lembrete_nome: lembKey,
+          tipo_acao: tipoKey,
           mensagem: a.mensagem,
           itens: [],
           urgentes: 0,
         });
       }
-      const g = map.get(key);
-      g.itens.push(a);
-      if (a.urgente) g.urgentes += 1;
+      const grupoLemb = grupoAcao.lembretes.get(lembKey);
+      grupoLemb.itens.push(a);
+      if (a.urgente) grupoLemb.urgentes += 1;
     }
-    // Urgentes primeiro, depois por nome
-    return Array.from(map.values()).sort((x, y) => {
-      if (y.urgentes !== x.urgentes) return y.urgentes - x.urgentes;
-      return x.lembrete_nome.localeCompare(y.lembrete_nome);
-    });
+
+    // Converte Maps em arrays ordenados
+    return Array.from(porAcao.values())
+      .map(g => ({
+        ...g,
+        lembretes: Array.from(g.lembretes.values()).sort((x, y) => {
+          if (y.urgentes !== x.urgentes) return y.urgentes - x.urgentes;
+          return x.lembrete_nome.localeCompare(y.lembrete_nome);
+        }),
+      }))
+      .sort((x, y) => {
+        if (y.urgentesTotal !== x.urgentesTotal) return y.urgentesTotal - x.urgentesTotal;
+        return x.tipo_acao.localeCompare(y.tipo_acao);
+      });
   }, [alertasFiltrados]);
 
   const toggleGrupo = (key) => {
@@ -144,6 +168,7 @@ export default function Lembretes() {
     setExpandidos(n);
   };
 
+  // Paginação: grupos de tipo_acao (raramente passa de 100 mas mantém padrão)
   const pagAlertas = usePagination(gruposAlertas, 100);
   const abrirHistorico = (id) => navigate(`/animais?open=${id}`);
 
@@ -202,93 +227,99 @@ export default function Lembretes() {
             </div>
           ) : (
             <div className="bg-white rounded-xl border border-[#E8DCC8] overflow-hidden" data-testid="alertas-agrupados">
-              <table className="w-full text-sm">
-                <thead className="bg-[#F5F0E8]">
-                  <tr>
-                    <th className="text-left px-3 py-3 w-8"></th>
-                    <th className="text-left px-4 py-3 font-semibold text-[#2F1810]">Lembrete / Ação</th>
-                    <th className="text-left px-4 py-3 font-semibold text-[#2F1810]">Tipo</th>
-                    <th className="text-left px-4 py-3 font-semibold text-[#2F1810]">Animais</th>
-                    <th className="text-left px-4 py-3 font-semibold text-[#2F1810]">Status</th>
-                    <th className="text-left px-4 py-3 font-semibold text-[#2F1810]">Mensagem</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pagAlertas.paginated.map((g) => {
-                    const key = `${g.lembrete_nome}||${g.tipo_acao}`;
-                    const aberto = expandidos.has(key);
-                    const total = g.itens.length;
-                    return (
-                      <React.Fragment key={key}>
-                        <tr
-                          className={`border-t border-[#E8DCC8] cursor-pointer transition-colors ${g.urgentes > 0 ? 'hover:bg-red-50/60 bg-red-50/30' : 'hover:bg-amber-50/60 bg-amber-50/30'}`}
-                          onClick={() => toggleGrupo(key)}
-                          data-testid={`grupo-alerta-${key}`}
-                        >
-                          <td className="px-3 py-3 text-[#7A8780]">{aberto ? <CaretDown size={16} /> : <CaretRight size={16} />}</td>
-                          <td className="px-4 py-3 font-medium text-[#2F1810]">
-                            <div className="flex items-center gap-2">
-                              <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${g.urgentes > 0 ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'}`}>
-                                <BellRinging size={14} weight="fill" />
-                              </div>
-                              {g.lembrete_nome}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 capitalize">
-                            <span className="text-xs px-2 py-0.5 rounded-full bg-[#4A6741]/10 text-[#4A6741]">{g.tipo_acao}</span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className="bg-[#4A6741]/10 text-[#4A6741] font-semibold px-2 py-0.5 rounded-full text-xs">{total} animal(is)</span>
-                          </td>
-                          <td className="px-4 py-3">
-                            {g.urgentes > 0 && (
-                              <span className="text-xs bg-red-200 text-red-700 px-2 py-0.5 rounded-full font-medium mr-1">
-                                {g.urgentes} nunca feito
-                              </span>
+              <div className="divide-y divide-[#E8DCC8]">
+                {pagAlertas.paginated.map((grupoAcao) => {
+                  const keyAcao = `acao||${grupoAcao.tipo_acao}`;
+                  const acaoAberto = expandidos.has(keyAcao);
+                  return (
+                    <div key={keyAcao}>
+                      {/* NÍVEL 1: tipo_acao */}
+                      <button
+                        onClick={() => toggleGrupo(keyAcao)}
+                        className={`w-full text-left px-4 py-3 transition-colors flex items-center gap-3 ${grupoAcao.urgentesTotal > 0 ? 'bg-red-50/40 hover:bg-red-50/70' : 'bg-amber-50/40 hover:bg-amber-50/70'}`}
+                        data-testid={`grupo-acao-${grupoAcao.tipo_acao}`}
+                      >
+                        <span className="text-[#7A8780]">{acaoAberto ? <CaretDown size={18} /> : <CaretRight size={18} />}</span>
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${grupoAcao.urgentesTotal > 0 ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'}`}>
+                          <BellRinging size={18} weight="fill" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold uppercase tracking-wide text-[#2F1810]">{grupoAcao.tipo_acao}</p>
+                          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                            <span className="text-xs bg-[#4A6741]/15 text-[#4A6741] px-2 py-0.5 rounded-full font-medium">{grupoAcao.lembretes.length} lembrete(s)</span>
+                            <span className="text-xs bg-[#4A6741]/10 text-[#4A6741] px-2 py-0.5 rounded-full font-medium">{grupoAcao.itensTotal} animal(is)</span>
+                            {grupoAcao.urgentesTotal > 0 && (
+                              <span className="text-xs bg-red-200 text-red-700 px-2 py-0.5 rounded-full font-medium">{grupoAcao.urgentesTotal} nunca feito</span>
                             )}
-                            {total - g.urgentes > 0 && (
-                              <span className="text-xs bg-amber-200 text-amber-700 px-2 py-0.5 rounded-full font-medium">
-                                {total - g.urgentes} vencido(s)
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-[#7A8780] text-xs truncate max-w-[250px]">{g.mensagem || '-'}</td>
-                        </tr>
-                        {aberto && (
-                          <tr className="bg-[#FAFAF7]">
-                            <td colSpan={6} className="px-4 py-3">
-                              <div className="space-y-1.5">
-                                {g.itens.map((a, i) => (
-                                  <div key={i} className="flex items-center justify-between px-3 py-2 bg-white rounded border border-[#E5E3DB]">
-                                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                                      <button
-                                        onClick={() => abrirHistorico(a.animal_id)}
-                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#E8F0E6] text-[#4A6741] hover:bg-[#4A6741] hover:text-white transition-colors font-medium text-xs"
-                                        data-testid={`link-alerta-animal-${a.animal_tag}`}
-                                        title="Abrir histórico do animal"
-                                      >
-                                        {a.animal_tag}
-                                        <span className="opacity-60">({a.animal_tipo})</span>
-                                      </button>
-                                      <span className="text-xs text-[#7A8780]">
-                                        {a.ultimo_evento ? `Último: ${new Date(a.ultimo_evento + 'T00:00:00').toLocaleDateString('pt-BR')}` : 'Nunca realizado'}
-                                      </span>
+                          </div>
+                        </div>
+                      </button>
+
+                      {/* NÍVEL 2: lembrete_nome (aparece quando nível 1 expandido) */}
+                      {acaoAberto && (
+                        <div className="bg-[#FAFAF7] border-t border-[#E8DCC8]">
+                          {grupoAcao.lembretes.map((g) => {
+                            const keyLemb = `lemb||${grupoAcao.tipo_acao}||${g.lembrete_nome}`;
+                            const lembAberto = expandidos.has(keyLemb);
+                            return (
+                              <div key={keyLemb} className="border-b border-[#E8DCC8] last:border-0">
+                                <button
+                                  onClick={() => toggleGrupo(keyLemb)}
+                                  className={`w-full text-left pl-12 pr-4 py-2.5 transition-colors flex items-center gap-3 ${g.urgentes > 0 ? 'hover:bg-red-50/60' : 'hover:bg-amber-50/60'}`}
+                                  data-testid={`grupo-lembrete-${keyLemb}`}
+                                >
+                                  <span className="text-[#7A8780]">{lembAberto ? <CaretDown size={14} /> : <CaretRight size={14} />}</span>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium text-[#2F1810]">{g.lembrete_nome}</p>
+                                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                      <span className="text-xs bg-[#4A6741]/10 text-[#4A6741] px-1.5 py-0.5 rounded-full font-medium">{g.itens.length} animal(is)</span>
+                                      {g.urgentes > 0 && (
+                                        <span className="text-xs bg-red-200 text-red-700 px-1.5 py-0.5 rounded-full font-medium">{g.urgentes} nunca feito</span>
+                                      )}
+                                      {g.itens.length - g.urgentes > 0 && (
+                                        <span className="text-xs bg-amber-200 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">{g.itens.length - g.urgentes} vencido(s)</span>
+                                      )}
+                                      {g.mensagem && <span className="text-xs text-[#7A8780] truncate">· {g.mensagem}</span>}
                                     </div>
-                                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${a.urgente ? 'bg-red-200 text-red-700' : 'bg-amber-200 text-amber-700'}`}>
-                                      {a.urgente ? 'Nunca feito' : 'Vencido'}
-                                    </span>
                                   </div>
-                                ))}
+                                </button>
+
+                                {/* NÍVEL 3: animais individuais */}
+                                {lembAberto && (
+                                  <div className="bg-white pl-16 pr-4 py-2 space-y-1.5 border-t border-[#E8DCC8]">
+                                    {g.itens.map((a, i) => (
+                                      <div key={i} className="flex items-center justify-between px-3 py-2 bg-[#FAFAF7] rounded border border-[#E5E3DB]">
+                                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                                          <button
+                                            onClick={() => abrirHistorico(a.animal_id)}
+                                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#E8F0E6] text-[#4A6741] hover:bg-[#4A6741] hover:text-white transition-colors font-medium text-xs"
+                                            data-testid={`link-alerta-animal-${a.animal_tag}`}
+                                            title="Abrir histórico do animal"
+                                          >
+                                            {a.animal_tag}
+                                            <span className="opacity-60">({a.animal_tipo})</span>
+                                          </button>
+                                          <span className="text-xs text-[#7A8780]">
+                                            {a.ultimo_evento ? `Último: ${new Date(a.ultimo_evento + 'T00:00:00').toLocaleDateString('pt-BR')}` : 'Nunca realizado'}
+                                          </span>
+                                        </div>
+                                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${a.urgente ? 'bg-red-200 text-red-700' : 'bg-amber-200 text-amber-700'}`}>
+                                          {a.urgente ? 'Nunca feito' : 'Vencido'}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-              <PaginationBar {...pagAlertas} label="grupos de alertas" />
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <PaginationBar {...pagAlertas} label="grupos de ações" />
             </div>
           )}
         </div>
