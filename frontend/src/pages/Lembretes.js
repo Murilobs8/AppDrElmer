@@ -1,18 +1,21 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { emit, on, EVENTS } from '../lib/eventBus';
-import { Plus, Trash, Pencil, Bell, BellRinging, ToggleLeft, ToggleRight, Warning } from '@phosphor-icons/react';
+import { Plus, Trash, Pencil, Bell, BellRinging, ToggleLeft, ToggleRight, Warning, CaretDown, CaretRight } from '@phosphor-icons/react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { usePagination, PaginationBar } from '../components/Pagination';
 import { toast } from 'sonner';
 
 const TIPOS_ACAO = ['vacinacao', 'pesagem', 'tratamento', 'desmame', 'vermifugacao', 'exame', 'outro'];
 const TIPOS_ANIMAIS = ['Bovino', 'Suino', 'Ovino', 'Caprino', 'Equino', 'Aves', 'Outros'];
 
 export default function Lembretes() {
+  const navigate = useNavigate();
   const [lembretes, setLembretes] = useState([]);
   const [alertas, setAlertas] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -20,6 +23,7 @@ export default function Lembretes() {
   const [editando, setEditando] = useState(null);
   const [tab, setTab] = useState('alertas');
   const [filtroTipoAlerta, setFiltroTipoAlerta] = useState('');
+  const [expandidos, setExpandidos] = useState(new Set());
 
   const [form, setForm] = useState({
     nome: '', tipo_acao: '', mensagem: '', recorrencia_dias: '', ativo: true,
@@ -109,6 +113,40 @@ export default function Lembretes() {
   const tiposAlerta = [...new Set(alertas.map(a => a.tipo_acao))].sort();
   const alertasFiltrados = filtroTipoAlerta ? alertas.filter(a => a.tipo_acao === filtroTipoAlerta) : alertas;
 
+  // Agrupa alertas por (lembrete_nome + tipo_acao). Se lembrete_nome estiver vazio, usa "Geral"
+  const gruposAlertas = useMemo(() => {
+    const map = new Map();
+    for (const a of alertasFiltrados) {
+      const key = `${a.lembrete_nome || 'Geral'}||${a.tipo_acao}`;
+      if (!map.has(key)) {
+        map.set(key, {
+          lembrete_nome: a.lembrete_nome || 'Geral',
+          tipo_acao: a.tipo_acao,
+          mensagem: a.mensagem,
+          itens: [],
+          urgentes: 0,
+        });
+      }
+      const g = map.get(key);
+      g.itens.push(a);
+      if (a.urgente) g.urgentes += 1;
+    }
+    // Urgentes primeiro, depois por nome
+    return Array.from(map.values()).sort((x, y) => {
+      if (y.urgentes !== x.urgentes) return y.urgentes - x.urgentes;
+      return x.lembrete_nome.localeCompare(y.lembrete_nome);
+    });
+  }, [alertasFiltrados]);
+
+  const toggleGrupo = (key) => {
+    const n = new Set(expandidos);
+    if (n.has(key)) n.delete(key); else n.add(key);
+    setExpandidos(n);
+  };
+
+  const pagAlertas = usePagination(gruposAlertas, 100);
+  const abrirHistorico = (id) => navigate(`/animais?open=${id}`);
+
   const formatCondicoes = (c) => {
     if (!c) return '-';
     const parts = [];
@@ -163,33 +201,94 @@ export default function Lembretes() {
               <p className="text-sm text-[#7A8780] mt-1">Todos os animais estão em dia! Crie regras aqui ou aplique um calendário em Eventos.</p>
             </div>
           ) : (
-            <div className="grid gap-3">
-              {alertasFiltrados.map((a, i) => (
-                <div key={i} className={`bg-white rounded-lg border p-4 flex items-center justify-between ${a.urgente ? 'border-red-300 bg-red-50/50' : 'border-amber-300 bg-amber-50/50'}`}>
-                  <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${a.urgente ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'}`}>
-                      <BellRinging size={20} weight="fill" />
-                    </div>
-                    <div>
-                      <p className="font-medium text-[#2F1810]">
-                        <span className="font-bold">{a.animal_tag}</span>
-                        <span className="text-[#7A8780] text-sm ml-2">({a.animal_tipo})</span>
-                      </p>
-                      <p className="text-sm text-[#7A8780]">
-                        <span className="capitalize font-medium text-[#2F1810]">{a.tipo_acao}</span>
-                        {a.mensagem && ` — ${a.mensagem}`}
-                      </p>
-                      <p className="text-xs text-[#7A8780] mt-0.5">
-                        {a.ultimo_evento ? `Último: ${new Date(a.ultimo_evento + 'T00:00:00').toLocaleDateString('pt-BR')}` : 'Nunca realizado'}
-                        {' · '}{a.lembrete_nome}
-                      </p>
-                    </div>
-                  </div>
-                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${a.urgente ? 'bg-red-200 text-red-700' : 'bg-amber-200 text-amber-700'}`}>
-                    {a.urgente ? 'Nunca feito' : 'Vencido'}
-                  </span>
-                </div>
-              ))}
+            <div className="bg-white rounded-xl border border-[#E8DCC8] overflow-hidden" data-testid="alertas-agrupados">
+              <table className="w-full text-sm">
+                <thead className="bg-[#F5F0E8]">
+                  <tr>
+                    <th className="text-left px-3 py-3 w-8"></th>
+                    <th className="text-left px-4 py-3 font-semibold text-[#2F1810]">Lembrete / Ação</th>
+                    <th className="text-left px-4 py-3 font-semibold text-[#2F1810]">Tipo</th>
+                    <th className="text-left px-4 py-3 font-semibold text-[#2F1810]">Animais</th>
+                    <th className="text-left px-4 py-3 font-semibold text-[#2F1810]">Status</th>
+                    <th className="text-left px-4 py-3 font-semibold text-[#2F1810]">Mensagem</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pagAlertas.paginated.map((g) => {
+                    const key = `${g.lembrete_nome}||${g.tipo_acao}`;
+                    const aberto = expandidos.has(key);
+                    const total = g.itens.length;
+                    return (
+                      <React.Fragment key={key}>
+                        <tr
+                          className={`border-t border-[#E8DCC8] cursor-pointer transition-colors ${g.urgentes > 0 ? 'hover:bg-red-50/60 bg-red-50/30' : 'hover:bg-amber-50/60 bg-amber-50/30'}`}
+                          onClick={() => toggleGrupo(key)}
+                          data-testid={`grupo-alerta-${key}`}
+                        >
+                          <td className="px-3 py-3 text-[#7A8780]">{aberto ? <CaretDown size={16} /> : <CaretRight size={16} />}</td>
+                          <td className="px-4 py-3 font-medium text-[#2F1810]">
+                            <div className="flex items-center gap-2">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${g.urgentes > 0 ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'}`}>
+                                <BellRinging size={14} weight="fill" />
+                              </div>
+                              {g.lembrete_nome}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 capitalize">
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-[#4A6741]/10 text-[#4A6741]">{g.tipo_acao}</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="bg-[#4A6741]/10 text-[#4A6741] font-semibold px-2 py-0.5 rounded-full text-xs">{total} animal(is)</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            {g.urgentes > 0 && (
+                              <span className="text-xs bg-red-200 text-red-700 px-2 py-0.5 rounded-full font-medium mr-1">
+                                {g.urgentes} nunca feito
+                              </span>
+                            )}
+                            {total - g.urgentes > 0 && (
+                              <span className="text-xs bg-amber-200 text-amber-700 px-2 py-0.5 rounded-full font-medium">
+                                {total - g.urgentes} vencido(s)
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-[#7A8780] text-xs truncate max-w-[250px]">{g.mensagem || '-'}</td>
+                        </tr>
+                        {aberto && (
+                          <tr className="bg-[#FAFAF7]">
+                            <td colSpan={6} className="px-4 py-3">
+                              <div className="space-y-1.5">
+                                {g.itens.map((a, i) => (
+                                  <div key={i} className="flex items-center justify-between px-3 py-2 bg-white rounded border border-[#E5E3DB]">
+                                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                                      <button
+                                        onClick={() => abrirHistorico(a.animal_id)}
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#E8F0E6] text-[#4A6741] hover:bg-[#4A6741] hover:text-white transition-colors font-medium text-xs"
+                                        data-testid={`link-alerta-animal-${a.animal_tag}`}
+                                        title="Abrir histórico do animal"
+                                      >
+                                        {a.animal_tag}
+                                        <span className="opacity-60">({a.animal_tipo})</span>
+                                      </button>
+                                      <span className="text-xs text-[#7A8780]">
+                                        {a.ultimo_evento ? `Último: ${new Date(a.ultimo_evento + 'T00:00:00').toLocaleDateString('pt-BR')}` : 'Nunca realizado'}
+                                      </span>
+                                    </div>
+                                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${a.urgente ? 'bg-red-200 text-red-700' : 'bg-amber-200 text-amber-700'}`}>
+                                      {a.urgente ? 'Nunca feito' : 'Vencido'}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+              <PaginationBar {...pagAlertas} label="grupos de alertas" />
             </div>
           )}
         </div>
