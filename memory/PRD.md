@@ -13,39 +13,55 @@ App de gestão rural completo (animais, movimentações, eventos sanitários, de
 - admin@fazenda.com / admin123 (prod apenas; MongoDB local do workspace Emergent está vazio)
 
 ## All Sessions
-1. Deploy Vercel/Render fix (ajv, .nvmrc, engines)
+1. Deploy Vercel/Render fix
 2. Notificações In-App + Web Push
-3. Pesagem com tipo (aferido/estimado/medio) + dialogs arrastáveis
+3. Pesagem com tipo + dialogs arrastáveis
 4. Calendário de Vacinação Padrão
-5. Filtros interativos: sequências clicáveis + filtros nos cabeçalhos
-6. **Análise de comunicação entre páginas de cadastro + 5 melhorias relacionais** (sessão atual, 2026-01)
+5. Filtros interativos
+6. Análise relacional + 5 melhorias de integridade (backend 15/15 passou)
+7. **Reestruturação "Visão 2.0"** — entrada unificada, aba Produção, eventos agrupados, lembretes simplificado (backend 17/17 passou)
 
-## Session 6 — Melhorias Relacionais (branch: `feature/melhorias-relacionais`)
+## Session 7 — Reestruturação "Visão 2.0" (branch: `feature/melhorias-relacionais`)
+
+### Mudanças conceituais no domínio
+Antes: Animais eram cadastrados em `/animais` e DEPOIS se registrava uma movimentação em `/movimentacoes`. Produção ficava misturada com entrada/saída. Calendário de Vacinação ficava em Lembretes. Eventos apareciam linha-a-linha (pesagem de 50 animais = 50 linhas).
+
+Depois: 
+- **Entrada = Cadastro**: ao registrar entrada, o animal é criado junto atomicamente.
+- **Produção tem aba própria**: coleção MongoDB `producoes` separada de `movimentacoes`.
+- **Calendário mudou para Eventos**: conceitualmente é protocolo de eventos sanitários, não lembrete.
+- **Eventos agrupados**: pesagem de 50 animais no mesmo dia = 1 linha clicável que expande.
+
 ### Backend (server.py)
-- DELETE /api/animais/{id} — retorna 409 com contagem de dependências. Query ?force=true apaga em cascata (movimentações e eventos deletados, filhos ficam com genitora_id=null)
-- DELETE /api/categorias/{id} — retorna 409 com contagem de despesas. ?force=true apaga despesas junto
-- GET /api/animais/{id}/filhos — lista descendência direta
-- GET /api/animais/{id}/historico — agora inclui filhos, total_filhos, genitora
-- POST /api/calendario-vacinacao/{tipo}/sincronizar-lembretes — identifica/desativa lembretes [Auto] órfãos
+- Modelos: `ProducaoCreate`, `Producao`, `ProducaoBulkCreate`, `EntradaAnimalCreate`, `EntradaAnimalBulkCreate`
+- `MovimentacaoCreate.tipo` agora `Literal["entrada","saida"]` (Movimentacao lê compat com "producao" legado)
+- `POST /api/movimentacoes/entrada` — cria animal + movimentação atomicamente
+- `POST /api/movimentacoes/entrada/bulk` — N animais com tags sequenciais + N movimentações
+- `POST /api/producoes`, `GET /api/producoes`, `PUT /api/producoes/{id}`, `DELETE /api/producoes/{id}`
+- `POST /api/producoes/bulk` — com `recorrente=true` cria N registros com datas espaçadas em 30 dias
+- `GET /api/dashboard/stats` — agora soma receitas de `producoes` (coleção nova) + vendas de movimentações + legado producao (compat)
 
 ### Frontend
-- lib/eventBus.js — event bus com CustomEvent para invalidação cruzada
-- Todas páginas emitem EVENTS.*_CHANGED após CRUD e escutam para recarregar
-- Navegação cruzada: tag do animal em Movimentações/Eventos é link que abre /animais?open=<id>
-- Animais.js: tratamento 409 (dialog de confirmação de cascata) + bulk delete inteligente
-- Despesas.js: tratamento 409 na deleção de categoria
-- Lembretes.js: ao salvar calendário, dry-run e pergunta sobre desativar órfãos
-- Histórico: nova seção Genealogia com mãe e lista de filhos clicáveis
+- `lib/eventBus.js` já existia (event bus para invalidação cruzada)
+- `pages/Producao.js` — NOVA página com CRUD + bulk + recorrência
+- `pages/Movimentacoes.js` — reescrita: só entrada/saida, dialog Nova Entrada com campos de animal+mov em seções visuais
+- `pages/Animais.js` — botões "Novo Animal" e "Em Massa" removidos; dialog de edição mantido para ícone Pencil
+- `pages/Eventos.js` — reescrita: tabela agrupa por (tipo+data+vacina) com caret/expansão inline + sub-tab "Calendário Padrão"
+- `pages/Lembretes.js` — reescrita: só regras + alertas, sem calendário
+- `components/Layout.js` — menu: Dashboard/Movimentações/Animais/Eventos/Produção/Despesas/Lembretes/Relatórios
+- `App.js` — rota `/producao` adicionada
 
-### Status dos testes
-- Backend: 15/15 testes passaram (100%) via testing_agent
-- Frontend: Lint limpo em todas as páginas modificadas
+### Status de testes
+- Backend: 17/17 (100%) via testing_agent_v3
+- Frontend: Lint limpo em todas as páginas
+- Tests file: `/app/backend/tests/test_visao_2_0.py` (regressão)
 
 ## Backlog / Próximos passos
-- P0: Validar em MongoDB Atlas antes de merge na main
+- P0: Validar visualmente em browser antes de merge (algumas páginas foram reescritas inteiras)
+- P0: Merge na main + deploy Render/Vercel
 - P1: Paginação nas tabelas grandes
-- P1: Refatorar server.py (1500+ linhas) em routers separados
 - P1: Busca global (Ctrl+K)
+- P1: Refatorar server.py (2000+ linhas) em routers separados
 - P2: Filtro por período no Dashboard
 - P2: Dark mode (next-themes já instalado)
 - P2: Gráfico de evolução de peso por animal
@@ -53,8 +69,8 @@ App de gestão rural completo (animais, movimentações, eventos sanitários, de
 - P3: Multi-fazenda (SaaS futuro)
 - P3: Índices MongoDB
 
-## Fluxo Git ensinado ao usuário
-- GitHub Flow (main protegida + branches feature/fix/refactor/docs/style)
+## Fluxo Git ensinado
+- GitHub Flow (main + branches feature/fix)
 - Conventional Commits (feat/fix/refactor/docs/style/chore)
-- Work em branch separada, teste local, PR no GitHub, merge na main
-- Save to GitHub botão no Emergent para push automático
+- Trabalhar em branch separada, testar local, PR, merge
+- Save to GitHub botão no Emergent
