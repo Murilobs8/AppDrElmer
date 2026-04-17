@@ -635,19 +635,6 @@ export default function Animais() {
                           <div className="flex justify-center py-6"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#4A6741]"></div></div>
                         ) : historicoData ? (
                           <div className="space-y-4" data-testid="historico-inline">
-                            {/* Resumo cards */}
-                            {historicoData.resumo_eventos && Object.keys(historicoData.resumo_eventos).length > 0 && (
-                              <div className="flex flex-wrap gap-2">
-                                {Object.entries(historicoData.resumo_eventos).map(([tipo, info]) => (
-                                  <div key={tipo} className="bg-white rounded-lg px-3 py-2 border border-[#E5E3DB] text-center min-w-[90px]">
-                                    <p className="text-base font-bold text-[#2F1810]">{info.total}</p>
-                                    <p className="text-[10px] text-[#7A8780] capitalize">{tipo}</p>
-                                    {info.ultimo && <p className="text-[10px] text-[#4A6741]">{new Date(info.ultimo + 'T00:00:00').toLocaleDateString('pt-BR')}</p>}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-
                             {/* Genealogia: genitora + filhos */}
                             {(historicoData.genitora || (historicoData.filhos && historicoData.filhos.length > 0)) && (
                               <div className="bg-white rounded-lg border border-[#E5E3DB] p-3" data-testid="genealogia-box">
