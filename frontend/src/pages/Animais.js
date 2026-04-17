@@ -62,6 +62,8 @@ export default function Animais() {
   const [historicoData, setHistoricoData] = useState(null);
   const [historicoLoading, setHistoricoLoading] = useState(false);
   const [alertasAnimal, setAlertasAnimal] = useState([]);
+  // { kind: 'subtipo'|'vacina'|'valor'|'peso'|'tipoRegistro', value: string, label: string } | null
+  const [historicoFiltro, setHistoricoFiltro] = useState(null);
 
   // Filtros
   const [filtroTag, setFiltroTag] = useState('');
@@ -136,12 +138,14 @@ export default function Animais() {
       setExpandidoId(null);
       setHistoricoData(null);
       setAlertasAnimal([]);
+      setHistoricoFiltro(null);
       return;
     }
     setExpandidoId(animal.id);
     setHistoricoLoading(true);
     setHistoricoData(null);
     setAlertasAnimal([]);
+    setHistoricoFiltro(null);
     try {
       const [histRes, alertRes] = await Promise.all([
         api.get(`/animais/${animal.id}/historico`),
@@ -697,33 +701,135 @@ export default function Animais() {
                               </div>
                             )}
 
-                            {/* Historico Realizado */}
+                            {/* Historico Realizado - agrupado por tipo + badges clicaveis */}
                             <div>
-                              <p className="text-xs font-bold text-[#4A6741] uppercase tracking-wider mb-2">
-                                Historico ({historicoData.total_eventos} evento(s) · {historicoData.total_movimentacoes} mov.)
-                              </p>
+                              <div className="flex items-center gap-2 flex-wrap mb-2">
+                                <p className="text-xs font-bold text-[#4A6741] uppercase tracking-wider">
+                                  Historico ({historicoData.total_eventos} evento(s) · {historicoData.total_movimentacoes} mov.)
+                                </p>
+                                {historicoFiltro && (
+                                  <button
+                                    onClick={() => setHistoricoFiltro(null)}
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium bg-[#4A6741] text-white rounded-full hover:bg-[#3B5334]"
+                                    data-testid="historico-filtro-limpar"
+                                    title="Remover filtro"
+                                  >
+                                    Filtro: {historicoFiltro.label} ✕
+                                  </button>
+                                )}
+                              </div>
                               {historicoData.historico.length === 0 ? (
                                 <p className="text-xs text-[#7A8780] py-2">Nenhum registro</p>
-                              ) : (
-                                <div className="space-y-1.5">
-                                  {historicoData.historico.map((item, i) => (
-                                    <div key={i} className={`flex items-start gap-3 px-3 py-2 rounded-lg border ${item.tipo === 'evento' ? 'border-[#E8DCC8] bg-white' : 'border-blue-100 bg-blue-50/30'}`}>
-                                      <div className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${item.tipo === 'evento' ? 'bg-[#4A6741]' : 'bg-[#2B6CB0]'}`}></div>
-                                      <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2">
-                                          <span className="text-xs font-medium capitalize text-[#2F1810]">{item.subtipo}</span>
-                                          <span className={`text-[10px] px-1 py-0.5 rounded ${item.tipo === 'evento' ? 'bg-[#4A6741]/10 text-[#4A6741]' : 'bg-[#2B6CB0]/10 text-[#2B6CB0]'}`}>{item.tipo === 'evento' ? 'Evento' : 'Mov.'}</span>
-                                          {item.vacina && <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded">{item.vacina}</span>}
-                                          {item.peso && <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">{item.peso} kg</span>}
-                                          {item.valor && <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">R$ {parseFloat(item.valor).toFixed(2)}</span>}
+                              ) : (() => {
+                                // Aplica filtro
+                                const filtrado = historicoFiltro
+                                  ? historicoData.historico.filter((it) => {
+                                      const f = historicoFiltro;
+                                      if (f.kind === 'subtipo') return (it.subtipo || '').toLowerCase() === f.value.toLowerCase();
+                                      if (f.kind === 'tipoRegistro') return it.tipo === f.value;
+                                      if (f.kind === 'vacina') return (it.vacina || '').toLowerCase() === f.value.toLowerCase();
+                                      if (f.kind === 'valor') return String(it.valor) === f.value;
+                                      if (f.kind === 'peso') return String(it.peso) === f.value;
+                                      return true;
+                                    })
+                                  : historicoData.historico;
+
+                                if (filtrado.length === 0) {
+                                  return <p className="text-xs text-[#7A8780] py-2">Nenhum registro para o filtro aplicado.</p>;
+                                }
+
+                                // Agrupa por subtipo
+                                const grupos = filtrado.reduce((acc, it) => {
+                                  const key = (it.subtipo || 'outro').toLowerCase();
+                                  (acc[key] = acc[key] || []).push(it);
+                                  return acc;
+                                }, {});
+
+                                // Ordena grupos por data do item mais recente (desc)
+                                const gruposOrdenados = Object.entries(grupos).sort((a, b) => {
+                                  const lastA = a[1].reduce((m, it) => (it.data && it.data > m ? it.data : m), '');
+                                  const lastB = b[1].reduce((m, it) => (it.data && it.data > m ? it.data : m), '');
+                                  return lastB.localeCompare(lastA);
+                                });
+
+                                const handleBadge = (kind, value, label) => (e) => {
+                                  e.stopPropagation();
+                                  if (historicoFiltro && historicoFiltro.kind === kind && historicoFiltro.value === value) {
+                                    setHistoricoFiltro(null);
+                                  } else {
+                                    setHistoricoFiltro({ kind, value, label });
+                                  }
+                                };
+
+                                const isActive = (kind, value) => historicoFiltro && historicoFiltro.kind === kind && historicoFiltro.value === value;
+
+                                return (
+                                  <div className="space-y-3">
+                                    {gruposOrdenados.map(([subtipo, items]) => (
+                                      <div key={subtipo} className="bg-white rounded-lg border border-[#E5E3DB] overflow-hidden" data-testid={`historico-grupo-${subtipo}`}>
+                                        <div className="flex items-center justify-between px-3 py-1.5 bg-[#F5F0E8] border-b border-[#E5E3DB]">
+                                          <button
+                                            onClick={handleBadge('subtipo', subtipo, subtipo)}
+                                            className={`text-[11px] font-bold uppercase tracking-wider transition-colors ${isActive('subtipo', subtipo) ? 'text-[#4A6741] underline' : 'text-[#2F1810] hover:text-[#4A6741]'}`}
+                                            title="Clique para filtrar só este tipo"
+                                            data-testid={`historico-grupo-titulo-${subtipo}`}
+                                          >
+                                            {subtipo}
+                                          </button>
+                                          <span className="text-[10px] text-[#7A8780]">{items.length} registro(s)</span>
                                         </div>
-                                        {item.detalhes && <p className="text-[10px] text-[#7A8780] mt-0.5">{item.detalhes}</p>}
+                                        <div className="divide-y divide-[#F1EEE6]">
+                                          {items.map((item, i) => (
+                                            <div key={i} className={`flex items-start gap-3 px-3 py-2 ${item.tipo === 'evento' ? '' : 'bg-blue-50/30'}`}>
+                                              <div className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${item.tipo === 'evento' ? 'bg-[#4A6741]' : 'bg-[#2B6CB0]'}`}></div>
+                                              <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                  <button
+                                                    onClick={handleBadge('tipoRegistro', item.tipo, item.tipo === 'evento' ? 'Evento' : 'Mov.')}
+                                                    className={`text-[10px] px-1 py-0.5 rounded transition-colors ${item.tipo === 'evento' ? 'bg-[#4A6741]/10 text-[#4A6741] hover:bg-[#4A6741]/20' : 'bg-[#2B6CB0]/10 text-[#2B6CB0] hover:bg-[#2B6CB0]/20'} ${isActive('tipoRegistro', item.tipo) ? 'ring-1 ring-offset-1 ring-[#4A6741]' : ''}`}
+                                                    title="Filtrar por tipo de registro"
+                                                  >
+                                                    {item.tipo === 'evento' ? 'Evento' : 'Mov.'}
+                                                  </button>
+                                                  {item.vacina && (
+                                                    <button
+                                                      onClick={handleBadge('vacina', item.vacina, item.vacina)}
+                                                      className={`text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded transition-colors hover:bg-green-200 ${isActive('vacina', item.vacina) ? 'ring-1 ring-offset-1 ring-green-600' : ''}`}
+                                                      title={`Filtrar por vacina: ${item.vacina}`}
+                                                    >
+                                                      {item.vacina}
+                                                    </button>
+                                                  )}
+                                                  {item.peso && (
+                                                    <button
+                                                      onClick={handleBadge('peso', String(item.peso), `${item.peso} kg`)}
+                                                      className={`text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded transition-colors hover:bg-amber-200 ${isActive('peso', String(item.peso)) ? 'ring-1 ring-offset-1 ring-amber-600' : ''}`}
+                                                      title="Filtrar por este peso"
+                                                    >
+                                                      {item.peso} kg
+                                                    </button>
+                                                  )}
+                                                  {item.valor && (
+                                                    <button
+                                                      onClick={handleBadge('valor', String(item.valor), `R$ ${parseFloat(item.valor).toFixed(2)}`)}
+                                                      className={`text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded transition-colors hover:bg-blue-200 ${isActive('valor', String(item.valor)) ? 'ring-1 ring-offset-1 ring-blue-600' : ''}`}
+                                                      title="Filtrar por este valor"
+                                                    >
+                                                      R$ {parseFloat(item.valor).toFixed(2)}
+                                                    </button>
+                                                  )}
+                                                </div>
+                                                {item.detalhes && <p className="text-[10px] text-[#7A8780] mt-0.5">{item.detalhes}</p>}
+                                              </div>
+                                              <span className="text-[10px] text-[#7A8780] flex-shrink-0">{item.data ? new Date(item.data + 'T00:00:00').toLocaleDateString('pt-BR') : '-'}</span>
+                                            </div>
+                                          ))}
+                                        </div>
                                       </div>
-                                      <span className="text-[10px] text-[#7A8780] flex-shrink-0">{item.data ? new Date(item.data + 'T00:00:00').toLocaleDateString('pt-BR') : '-'}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
+                                    ))}
+                                  </div>
+                                );
+                              })()}
                             </div>
                           </div>
                         ) : null}
