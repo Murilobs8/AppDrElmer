@@ -1,114 +1,61 @@
-# PRD - Sistema de Gestão de Fazenda (Gestão Rural) - AppDrElmer
+# AppDrElmer — Sistema de Gestão Rural (PRD)
 
-## Problem Statement
-App de gestão rural completo (animais, movimentações, eventos sanitários, despesas, lembretes automáticos, calendário de vacinação). Dono: Murilobs8. Deployed em produção (Render backend + Vercel frontend + MongoDB Atlas).
+## Problema Original
+Usuário iniciante em desenvolvimento trouxe um repositório público (https://github.com/Murilobs8/AppDrElmer.git) pedindo para melhorar o projeto (refatoração, melhorias UX/UI e novas funcionalidades).
 
-## Stack
-- Frontend: React 19 + CRA + TailwindCSS + Radix UI + React Router 7 + Recharts + next-themes (dark mode)
-- Backend: FastAPI + Motor (MongoDB async) + ReportLab + OpenPyXL
-- Auth: JWT (cookies httpOnly + Bearer) + bcrypt
-- Deploy: Render (backend), Vercel (frontend), MongoDB Atlas (BD)
+## Arquitetura
+- **Frontend**: React 19 + TailwindCSS + Radix/shadcn + React Router 7 + Recharts
+- **Backend**: FastAPI (Python) + Motor (MongoDB async) + JWT (access + refresh cookies)
+- **Banco**: MongoDB (coleções: users, categorias, despesas, animais, movimentacoes, producoes, eventos, lembretes)
+- **Infra**: Supervisor (backend:8001, frontend:3000), deploy na Emergent
+- **Cross-component**: EventBus (eventBus.js) para invalidar/atualizar dados entre páginas
 
-## Credentials de produção (somente referência, NÃO local)
-- admin@fazenda.com / admin123 (prod apenas; MongoDB local do workspace Emergent está vazio)
+## Estrutura do Backend (Refatorada)
+- `server.py`: ~1712 linhas (endpoints FastAPI)
+- `models.py`: Schemas Pydantic
+- `helpers.py`: funções utilitárias (`prepare_for_db`, `serialize_doc`, etc)
+- `security.py`: JWT / auth / cookies
+- `constants.py`: CALENDARIO_PADRAO
 
-## All Sessions
-1. Deploy Vercel/Render fix
-2. Notificações In-App + Web Push
-3. Pesagem com tipo + dialogs arrastáveis
-4. Calendário de Vacinação Padrão
-5. Filtros interativos
-6. Análise relacional + 5 melhorias de integridade (backend 15/15)
-7. Reestruturação "Visão 2.0" (backend 17/17)
-8. **4 melhorias (backlog)** + **agrupamento de alertas** em Lembretes (backend 53/53 regressão)
+## Funcionalidades Implementadas
 
-## Session 8 — Dark mode + Paginação + Busca global + Refatoração backend + Alertas agrupados
+### Básicas (pré-existentes)
+- Auth JWT (login/logout/refresh)
+- CRUD Animais, Movimentações, Eventos, Despesas, Lembretes, Usuários
+- Dashboard com gráficos
 
-### Frontend
-- **Dark mode** via `next-themes` + CSS overrides globais em `index.css`
-  - `ThemeProvider` em App.js com defaultTheme="light"
-  - Toggle Sol/Lua no header da sidebar (Layout.js)
-  - CSS overrides para cores hardcoded (bg-[#FDFCFB], text-[#1B2620], etc) via seletores `.dark`
-  - Variáveis HSL para Radix e componentes UI
+### Visão 2.0 (refatoração realizada nesta sessão)
+- **Produção separada**: Nova coleção `producoes` + aba dedicada + mini-dashboard
+- **Entrada unificada**: Cadastro de animal é criado via `POST /api/movimentacoes/entrada` (atomically cria animal + movimentação)
+- **Eventos agrupados** por tipo+data, com Calendário de Vacinação integrado na aba Eventos
+- **Dark Mode** (`next-themes`) com contraste ajustado em gráficos, alerts e badges
+- **Paginação** (100 itens) em todas as tabelas principais
+- **Busca Global** (Ctrl+K) via CommandPalette
+- **Alertas Hierárquicos** em 3 níveis: Tipo de Ação → Regra de Lembrete → Animais
+- **Ações em Lote** (Bulk): botão "Registrar para todos" em cada regra do Lembrete abre modal para criar N eventos idênticos (vacinação/pesagem/etc) com um clique — usa `POST /api/eventos/bulk-from-ids`
 
-- **Paginação client-side (100/página)** via `components/Pagination.js`
-  - Hook `usePagination(items, 100)` + componente `<PaginationBar />`
-  - Aplicado em Animais, Movimentações, Eventos, Produção, Despesas (despesas+categorias), Lembretes (alertas agrupados)
-  - Volta pra página 1 automaticamente quando total cai abaixo do page atual (útil com filtros)
+## Endpoints Chave
+- `POST /api/auth/login`
+- `POST /api/movimentacoes/entrada` — cria animal + movimentação atomicamente
+- `POST /api/eventos/bulk-from-ids` — cria mesmo evento para lista de animais (bulk action)
+- `GET /api/producoes`
+- `GET /api/lembretes/alertas` — retorna alertas agrupados
 
-- **Busca global Ctrl+K** via `components/CommandPalette.js`
-  - Atalho Ctrl+K / ⌘K em qualquer tela (window listener em Layout.js)
-  - Busca client-side em: animais (tag/tipo/obs), movimentações, eventos, despesas, produções, lembretes
-  - Resultados agrupados por tipo, navegação com setas + Enter
-  - Clicar em animal abre seu histórico em /animais?open={id}
+## Mudanças de Schema
+- `producao` migrado de `movimentacoes` para coleção própria `producoes`
+- Adicionado campo `peso_tipo` (aferido/estimado/medio) em eventos de pesagem
 
-- **Agrupamento de alertas em Lembretes** (NOVO)
-  - Alertas agora agrupam por (lembrete_nome + tipo_acao)
-  - Linha clicável mostra contagem total de animais, quantos "nunca feito" vs "vencidos"
-  - Clique expande e mostra lista de animais com tag, último evento, link pro histórico
-  - Urgentes ficam no topo (sort por count de urgentes desc)
+## Credenciais de Teste
+Ver `/app/memory/test_credentials.md`
 
-### Backend - Refatoração
-- **server.py reduzido de 2063 → 1669 linhas** (-18%)
-- Módulos extraídos:
-  - `models.py` — todos os modelos Pydantic
-  - `helpers.py` — serialize_doc, prepare_for_db
-  - `security.py` — JWT, bcrypt, get_current_user, require_admin (usa import tardio para db)
-  - `constants.py` — CALENDARIO_PADRAO (protocolos sanitários por espécie)
-- Zero mudança semântica nos endpoints — só definições movidas
+## Backlog / Roadmap
 
-### Status dos testes
-- Backend: **53/53 passed (100%)** via testing_agent_v3
-  - 21 testes de regressão pós-refatoração
-  - 17 testes da Visão 2.0
-  - 15 testes de melhorias relacionais
-- Frontend: Lint limpo em todas as páginas
+### P2 (baixa prioridade)
+- Banner dismissível no Dashboard explicando mudanças da "Visão 2.0" (Cadastro de animais agora em Movimentações → Entrada; Produção como aba própria)
+- Replicar "Registrar para todos" dentro do `NotificationBell.js` (sino no header) — usuário adiou
 
-## Backlog / Próximos passos
-- P0: Merge da branch na main + deploy Render/Vercel
-- P1: Refatorar ainda mais — quebrar server.py em routers/ (auth, animais, movimentacoes, ...)
-- P1: Gráfico de evolução de peso por animal (histórico)
-- P2: Filtro por período no Dashboard
-- P2: Upload de foto do animal
-- P2: Gráfico de produção semanal/mensal no Dashboard
-- P3: Multi-fazenda (SaaS futuro)
-- P3: Índices MongoDB
-
-## Estrutura do backend após refatoração
-```
-backend/
-├── server.py         (1669 linhas - endpoints)
-├── models.py         (modelos Pydantic)
-├── helpers.py        (serialização)
-├── security.py       (auth JWT/bcrypt)
-├── constants.py      (CALENDARIO_PADRAO)
-├── requirements.txt
-└── .env
-```
-
-## Estrutura do frontend
-```
-frontend/src/
-├── components/
-│   ├── Layout.js       (sidebar + toggle theme + cmd palette + shortcut Ctrl+K)
-│   ├── CommandPalette.js    (busca global)
-│   ├── Pagination.js   (usePagination hook + PaginationBar)
-│   ├── NotificationBell.js
-│   ├── SelectEditavel.js
-│   └── ui/             (shadcn components)
-├── lib/
-│   ├── api.js          (axios configurado)
-│   └── eventBus.js     (invalidação cruzada)
-├── pages/
-│   ├── Dashboard.js
-│   ├── Animais.js      (só consulta/histórico/edição — cadastro via Movimentações>Entrada)
-│   ├── Movimentacoes.js (entrada unifica animal+mov; saída; tabs)
-│   ├── Eventos.js      (agrupado por tipo+data+vacina; calendário vacinação embutido)
-│   ├── Producao.js     (NOVO - coleção separada producoes)
-│   ├── Despesas.js
-│   ├── Lembretes.js    (alertas AGRUPADOS + regras)
-│   ├── Relatorios.js
-│   ├── Usuarios.js
-│   └── Login.js
-└── App.js              (ThemeProvider + rotas)
-```
+### Ideias Futuras
+- Exportação de relatórios em PDF/Excel
+- Filtros avançados em Animais (por genitor, status, idade)
+- Notificações Web Push já têm VAPID configurado — pode expandir cobertura
+- Gráfico temporal de produção por mês/categoria
